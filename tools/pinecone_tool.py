@@ -1,5 +1,13 @@
 # tools/pinecone_tool.py
-from crewai.tools import tool
+
+# crewai is only needed when this module is used as an agent tool.
+# kb_sync.py uses the raw functions directly, so we degrade gracefully.
+try:
+    from crewai.tools import tool
+except ImportError:
+    def tool(func):  # no-op decorator fallback
+        return func
+
 from pinecone import Pinecone
 from openai import OpenAI
 import os
