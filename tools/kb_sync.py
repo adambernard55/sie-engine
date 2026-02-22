@@ -27,6 +27,12 @@ if sys.platform == 'win32':
 # Load environment variables
 load_dotenv()
 
+# Ensure the engine root (parent of tools/) is on sys.path so that
+# `from tools.x import ...` works regardless of where the script is invoked from.
+_engine_root = str(Path(__file__).parent.parent)
+if _engine_root not in sys.path:
+    sys.path.insert(0, _engine_root)
+
 # Import Pinecone functions
 from tools.pinecone_tool import upsert_to_knowledge_core, batch_upsert_to_knowledge_core
 
