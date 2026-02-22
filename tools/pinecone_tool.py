@@ -5,8 +5,12 @@
 try:
     from crewai.tools import tool
 except ImportError:
-    def tool(func):  # no-op decorator fallback
-        return func
+    def tool(func_or_name=None):  # no-op fallback handles @tool and @tool("name")
+        if callable(func_or_name):
+            return func_or_name
+        def decorator(func):
+            return func
+        return decorator
 
 from pinecone import Pinecone
 from openai import OpenAI
