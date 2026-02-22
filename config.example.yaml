@@ -1,0 +1,34 @@
+# SIE Agent Loop — Instance Configuration Template
+#
+# Copy this file to config.yaml and fill in values for your site.
+# Credentials (WP_APP_PASSWORD, OPENAI_API_KEY, PINECONE_API_KEY, etc.)
+# belong in .env — never put secrets in this file.
+
+# ── Knowledge base ────────────────────────────────────────────────────────────
+
+# Path to the Obsidian vault kb/ folder. ~ expands to your home directory.
+kb_root: ~/path/to/your/kb
+
+# ── WordPress ─────────────────────────────────────────────────────────────────
+
+wp_site_url: https://yoursite.com
+wp_username: YourWPUsername    # also readable from WP_USERNAME in .env
+
+# ── Taxonomy ──────────────────────────────────────────────────────────────────
+
+# WordPress topic ID used when no path pattern matches.
+# Find IDs at: yoursite.com/wp-admin/edit-tags.php?taxonomy=knowledge_topics
+default_topic_id: 0
+
+# File path pattern → WordPress topic (category) ID.
+# More specific paths must appear before their parent paths.
+# Pattern format: /TOP_LEVEL_FOLDER/optional/subfolders/
+topic_mapping:
+  /SECTION_A/subsection/: 101
+  /SECTION_A/: 100
+  /SECTION_B/: 200
+
+# Parent topic ID for each top-level KB folder name.
+parent_topics:
+  SECTION_A: 100
+  SECTION_B: 200

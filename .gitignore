@@ -1,0 +1,17 @@
+# Credentials and instance config — never committed to the hub repo
+.env
+config.yaml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+nul
