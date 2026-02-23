@@ -93,8 +93,8 @@ def _load_config(config_path: str = None) -> None:
             config = yaml.safe_load(fh) or {}
         print(f"Config: {config_file}")
 
-    # KB root
-    kb_root_str = config.get("kb_root") or os.getenv("KB_ROOT")
+    # KB root — env var takes priority so CI/GH Actions can override config.yaml
+    kb_root_str = os.getenv("KB_ROOT") or config.get("kb_root")
     if not kb_root_str:
         raise ValueError(
             "kb_root is not configured. "
@@ -102,9 +102,9 @@ def _load_config(config_path: str = None) -> None:
         )
     KB_ROOT = Path(kb_root_str).expanduser().resolve()
 
-    # WordPress — non-sensitive values may live in config.yaml
-    WP_SITE_URL = config.get("wp_site_url") or os.getenv("WP_SITE_URL", "")
-    WP_USERNAME = config.get("wp_username") or os.getenv("WP_USERNAME", "")
+    # WordPress — env var takes priority (CI), then config.yaml
+    WP_SITE_URL = os.getenv("WP_SITE_URL") or config.get("wp_site_url", "")
+    WP_USERNAME = os.getenv("WP_USERNAME") or config.get("wp_username", "")
     WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")   # credentials: .env only
 
     # Topic taxonomy — try live WP endpoint first, fall back to config.yaml
