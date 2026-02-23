@@ -107,12 +107,47 @@ def _load_config(config_path: str = None) -> None:
     WP_USERNAME = config.get("wp_username") or os.getenv("WP_USERNAME", "")
     WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")   # credentials: .env only
 
-    # Topic taxonomy
-    TOPIC_MAPPING = config.get("topic_mapping") or {}
+    # Topic taxonomy — try live WP endpoint first, fall back to config.yaml
+    TOPIC_MAPPING = _fetch_wp_topic_mapping(WP_SITE_URL, WP_USERNAME, WP_APP_PASSWORD)
+    if TOPIC_MAPPING:
+        print(f"Topic mapping: fetched {len(TOPIC_MAPPING)} topics from WordPress")
+    else:
+        TOPIC_MAPPING = config.get("topic_mapping") or {}
+        if TOPIC_MAPPING:
+            print(f"Topic mapping: loaded {len(TOPIC_MAPPING)} topics from config.yaml")
+
     PARENT_TOPIC_IDS = config.get("parent_topics") or {}
     DEFAULT_TOPIC_ID = int(
         config.get("default_topic_id") or os.getenv("DEFAULT_TOPIC_ID", "0")
     )
+
+
+def _fetch_wp_topic_mapping(site_url: str, username: str, app_password: str) -> dict:
+    """Fetch topic path-pattern → ID mapping from the SIE WordPress plugin endpoint.
+
+    Returns an empty dict if the plugin isn't installed, credentials are missing,
+    or the request fails — so the caller always falls back to config.yaml gracefully.
+    """
+    if not all([site_url, username, app_password]):
+        return {}
+
+    url = f"{site_url.rstrip('/')}/wp-json/sie/v1/topics"
+    auth = base64.b64encode(f"{username}:{app_password}".encode()).decode()
+
+    try:
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Basic {auth}"},
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, dict) and data:
+                return data
+    except Exception:
+        pass  # network error, plugin not installed, etc. — silently fall back
+
+    return {}
 
 
 # Initialise on module import.
