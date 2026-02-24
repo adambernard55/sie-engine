@@ -34,7 +34,12 @@ if _engine_root not in sys.path:
     sys.path.insert(0, _engine_root)
 
 # Import Pinecone functions
-from tools.pinecone_tool import upsert_to_knowledge_core, batch_upsert_to_knowledge_core
+from tools.pinecone_tool import (
+    upsert_to_knowledge_core,
+    batch_upsert_to_knowledge_core,
+    delete_from_knowledge_core,
+    chunk_document,
+)
 
 # =============================================================================
 # Configuration
@@ -709,21 +714,46 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
             )
             result["rankmath"] = "updated" if rankmath_success else "failed"
 
-        # Sync to Pinecone
-        pinecone_content = f"{title}\n\n{body}"
-        if semantic_summary:
-            pinecone_content = f"{title}\n\n{semantic_summary}\n\n{body}"
+        # Sync to Pinecone (chunked)
+        post_id = post["id"]
+        base_id = f"kb-{post_id}"
 
-        pinecone_result = upsert_to_knowledge_core(
-            content=pinecone_content,
-            doc_id=f"kb-{post['id']}",
+        # Delete old vectors — legacy single-vector + up to 20 chunk IDs.
+        # Pinecone silently ignores IDs that don't exist.
+        old_ids = [base_id] + [f"{base_id}-chunk-{i}" for i in range(20)]
+        delete_from_knowledge_core(old_ids)
+
+        # Chunk the document
+        chunks = chunk_document(
             title=title,
-            source=f"{WP_SITE_URL}/kb/{slug}/",
-            date=updated or datetime.now().isoformat(),
-            post_type="knowledge_base",
-            url=result["url"]
+            body=body,
+            semantic_summary=semantic_summary,
+            synthetic_questions=synthetic_questions,
+            key_concepts=key_concepts,
+            tags=tags,
         )
-        result["pinecone"] = pinecone_result
+
+        # Upsert each chunk
+        chunk_results = []
+        for chunk in chunks:
+            vector_id = f"{base_id}-chunk-{chunk['chunk_index']}"
+            cr = upsert_to_knowledge_core(
+                content=chunk["content"],
+                doc_id=vector_id,
+                title=title,
+                source=f"{WP_SITE_URL}/kb/{slug}/",
+                date=updated or datetime.now().isoformat(),
+                post_type="knowledge_base",
+                url=result["url"],
+                tags=tags if isinstance(tags, list) else [],
+                key_concepts=key_concepts if isinstance(key_concepts, list) else [],
+                synthetic_questions=synthetic_questions if isinstance(synthetic_questions, list) else [],
+                section_header=chunk["section_header"],
+                chunk_index=chunk["chunk_index"],
+                total_chunks=len(chunks),
+            )
+            chunk_results.append(cr)
+        result["pinecone"] = f"{len(chunks)} chunk(s) upserted"
 
     except Exception as e:
         result["status"] = "error"
