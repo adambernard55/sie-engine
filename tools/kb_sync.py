@@ -142,7 +142,7 @@ def _fetch_wp_topic_mapping(site_url: str, username: str, app_password: str) -> 
     try:
         response = requests.get(
             url,
-            headers={"Authorization": f"Basic {auth}"},
+            headers={"Authorization": f"Basic {auth}", "User-Agent": "SIE-KBSync/1.0"},
             timeout=10
         )
         if response.status_code == 200:
@@ -169,7 +169,8 @@ class WordPressClient:
         self.session = requests.Session()
         self.session.headers.update({
             "Authorization": f"Basic {self.auth_header}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "SIE-KBSync/1.0"
         })
 
     def get_post_by_slug(self, slug: str) -> Optional[dict]:
@@ -521,7 +522,7 @@ def title_from_filename(filename: str) -> str:
 
 
 def get_topic_id(file_path: Path, kb_root: Path) -> int:
-    """Determine WordPress topic ID from file path."""
+    """Determine WordPress topic ID from file path (most specific match)."""
     relative_path = str(file_path.relative_to(kb_root)).replace("\\", "/")
 
     # Check mappings (most specific first - sorted by length descending)
@@ -530,6 +531,27 @@ def get_topic_id(file_path: Path, kb_root: Path) -> int:
             return topic_id
 
     return DEFAULT_TOPIC_ID
+
+
+def get_all_topic_ids(file_path: Path, kb_root: Path) -> list[int]:
+    """Return all matching topic IDs for a file path (full hierarchy).
+
+    For a file at AI/3_methods/mcp/article.md this returns IDs for:
+    /AI/3_methods/mcp/, /AI/3_methods/, /AI/ — i.e. the full ancestor chain.
+    """
+    relative_path = str(file_path.relative_to(kb_root)).replace("\\", "/")
+    topic_ids = []
+    seen = set()
+
+    for pattern, topic_id in sorted(TOPIC_MAPPING.items(), key=lambda x: -len(x[0])):
+        if pattern.strip("/") in relative_path and topic_id not in seen:
+            topic_ids.append(topic_id)
+            seen.add(topic_id)
+
+    if not topic_ids:
+        topic_ids.append(DEFAULT_TOPIC_ID)
+
+    return topic_ids
 
 
 def get_parent_topic_id(file_path: Path, kb_root: Path) -> int:
@@ -651,13 +673,13 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
             if tag_id:
                 tag_ids.append(tag_id)
 
-        # Build WordPress payload
-        parent_topic_id = get_parent_topic_id(file_path, KB_ROOT)
+        # Build WordPress payload — assign full topic hierarchy
+        all_topic_ids = get_all_topic_ids(file_path, KB_ROOT)
         payload = {
             "title": title,
             "content": html_content,
             "status": "publish",
-            "knowledge_topics": [parent_topic_id, topic_id],
+            "knowledge_topics": all_topic_ids,
             "knowledge_tag": tag_ids
         }
 
@@ -836,7 +858,13 @@ def sync_file_by_path(file_path: str, dry_run: bool = False) -> dict:
             existing_mapping = {}
 
     wp_client = WordPressClient(WP_SITE_URL, WP_USERNAME, WP_APP_PASSWORD)
-    return sync_file(path, wp_client, dry_run=dry_run, existing_mapping=existing_mapping)
+    result = sync_file(path, wp_client, dry_run=dry_run, existing_mapping=existing_mapping)
+
+    # Save mapping for single-file syncs too
+    if not dry_run:
+        save_mapping_file([result])
+
+    return result
 
 
 def save_mapping_file(results: list[dict]) -> None:
