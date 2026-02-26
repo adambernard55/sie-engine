@@ -5,7 +5,7 @@ fastapi
 uvicorn
 tavily-python
 firecrawl-py
-pinecone-client
+pinecone
 numpy
 pyyaml
 markdown
