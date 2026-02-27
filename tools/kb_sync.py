@@ -142,7 +142,11 @@ def _fetch_wp_topic_mapping(site_url: str, username: str, app_password: str) -> 
     try:
         response = requests.get(
             url,
-            headers={"Authorization": f"Basic {auth}", "User-Agent": "SIE-KBSync/1.0"},
+            headers={
+                "Authorization": f"Basic {auth}",
+                "User-Agent": "Mozilla/5.0 (compatible; SIE-KBSync/1.0)",
+                "X-SIE-Sync": "true"
+            },
             timeout=10
         )
         if response.status_code == 200:
@@ -170,7 +174,8 @@ class WordPressClient:
         self.session.headers.update({
             "Authorization": f"Basic {self.auth_header}",
             "Content-Type": "application/json",
-            "User-Agent": "SIE-KBSync/1.0"
+            "User-Agent": "Mozilla/5.0 (compatible; SIE-KBSync/1.0)",
+            "X-SIE-Sync": "true"
         })
 
     def get_post_by_slug(self, slug: str) -> Optional[dict]:
