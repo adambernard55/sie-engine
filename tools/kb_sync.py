@@ -187,6 +187,24 @@ class WordPressClient:
             return posts[0] if posts else None
         return None
 
+    def search_post_by_title(self, title: str) -> Optional[dict]:
+        """Search for a knowledge post by exact title match.
+
+        Uses the WP REST API search parameter then filters for an exact match
+        to avoid false positives on partial title overlaps.
+        """
+        url = f"{self.site_url}/wp-json/wp/v2/knowledge"
+        response = self.session.get(url, params={"search": title, "per_page": 5})
+        if response.status_code == 200:
+            posts = response.json()
+            for post in posts:
+                rendered = post.get("title", {}).get("rendered", "")
+                # WordPress HTML-encodes titles — decode for comparison
+                import html
+                if html.unescape(rendered).strip() == title.strip():
+                    return post
+        return None
+
     def create_post(self, payload: dict) -> dict:
         """Create a new knowledge post."""
         url = f"{self.site_url}/wp-json/wp/v2/knowledge"
@@ -707,20 +725,40 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
         if acf:
             payload["acf"] = acf
 
-        # Check if post exists - first check mapping file for known post_id
+        # Check if post exists — multi-tier lookup to prevent duplicates.
+        #
+        # Tier 1: mapping file (file path → post_id)
+        # Tier 2: slug lookup (path-based slug as generated now)
+        # Tier 3: filename-only slug lookup (handles pre-path-slug posts)
+        # Tier 4: title search (catches everything else)
+        # Tier 5: create new post (only if all lookups fail)
+        #
         rel_path = str(file_path.relative_to(KB_ROOT)).replace("\\", "/")
         existing_post_id = None
 
+        # Tier 1: mapping file
         if existing_mapping and rel_path in existing_mapping:
             existing_post_id = existing_mapping[rel_path].get("post_id")
 
         if existing_post_id:
-            # Update existing post by ID (handles slug changes)
             post = wp_client.update_post(existing_post_id, payload)
             result["status"] = "updated"
         else:
-            # Fall back to slug lookup for new files
+            existing = None
+
+            # Tier 2: path-based slug lookup
             existing = wp_client.get_post_by_slug(slug)
+
+            # Tier 3: filename-only slug (for posts created before path slugs)
+            if not existing:
+                filename_slug = slug_from_filename(file_path.name)
+                if filename_slug != slug:
+                    existing = wp_client.get_post_by_slug(filename_slug)
+
+            # Tier 4: title search (last resort before creating)
+            if not existing:
+                existing = wp_client.search_post_by_title(title)
+
             if existing:
                 post = wp_client.update_post(existing["id"], payload)
                 result["status"] = "updated"
