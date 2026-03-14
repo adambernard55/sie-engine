@@ -14,11 +14,13 @@ define( 'SIE_VERSION',    '1.0.0' );
 define( 'SIE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SIE_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
+require_once SIE_PLUGIN_DIR . 'includes/class-cpt.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-topic-api.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-chat-api.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-settings.php';
 
 add_action( 'plugins_loaded', function () {
+    ( new SIE_CPT() )->init();
     ( new SIE_Topic_API() )->init();
     ( new SIE_Chat_API() )->init();
     ( new SIE_Settings() )->init();
