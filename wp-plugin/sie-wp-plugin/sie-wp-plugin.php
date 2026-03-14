@@ -18,10 +18,18 @@ require_once SIE_PLUGIN_DIR . 'includes/class-cpt.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-topic-api.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-chat-api.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-settings.php';
+require_once SIE_PLUGIN_DIR . 'includes/class-permalink.php';
 
 add_action( 'plugins_loaded', function () {
     ( new SIE_CPT() )->init();
     ( new SIE_Topic_API() )->init();
     ( new SIE_Chat_API() )->init();
     ( new SIE_Settings() )->init();
+    ( new SIE_Permalink() )->init();
+} );
+
+// Flush rewrite rules on activation so new permalink structure takes effect.
+register_activation_hook( __FILE__, function () {
+    ( new SIE_Permalink() )->init();
+    flush_rewrite_rules();
 } );

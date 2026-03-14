@@ -132,7 +132,7 @@ class SIE_Settings {
                 <code><?php echo esc_url( rest_url( 'sie/v1/topics' ) ); ?></code>
                 — used automatically by kb_sync when credentials are configured.</p>
             <p><strong>Topic path patterns:</strong> go to
-                <a href="<?php echo esc_url( admin_url( 'edit-tags.php?taxonomy=knowledge_topics&post_type=knowledge' ) ); ?>">
+                <a href="<?php echo esc_url( admin_url( 'edit-tags.php?taxonomy=knowledge_topic&post_type=knowledge' ) ); ?>">
                     Knowledge Topics</a> and edit each term to set its KB Path Pattern.</p>
         </div>
 

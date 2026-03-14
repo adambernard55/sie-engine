@@ -3,7 +3,7 @@
  * Topic Discovery API
  *
  * Exposes GET /wp-json/sie/v1/topics → { "/AI/0_fundamentals/": 1186, ... }
- * Also adds a "KB Path Pattern" meta field to each knowledge_topics term so
+ * Also adds a "KB Path Pattern" meta field to each knowledge_topic term so
  * kb_sync.py can fetch the full mapping dynamically instead of hardcoding IDs.
  */
 
@@ -12,11 +12,22 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class SIE_Topic_API {
 
     public function init() {
+        add_action( 'init',                                 [ $this, 'register_meta' ] );
         add_action( 'rest_api_init',                        [ $this, 'register_routes' ] );
-        add_action( 'knowledge_topics_edit_form_fields',    [ $this, 'render_edit_field'  ], 10, 2 );
-        add_action( 'knowledge_topics_add_form_fields',     [ $this, 'render_add_field'   ], 10, 1 );
-        add_action( 'edited_knowledge_topics',              [ $this, 'save_field' ] );
-        add_action( 'create_knowledge_topics',              [ $this, 'save_field' ] );
+        add_action( 'knowledge_topic_edit_form_fields',    [ $this, 'render_edit_field'  ], 10, 2 );
+        add_action( 'knowledge_topic_add_form_fields',     [ $this, 'render_add_field'   ], 10, 1 );
+        add_action( 'edited_knowledge_topic',              [ $this, 'save_field' ] );
+        add_action( 'create_knowledge_topic',              [ $this, 'save_field' ] );
+    }
+
+    public function register_meta() {
+        register_term_meta( 'knowledge_topic', '_sie_path_pattern', [
+            'type'              => 'string',
+            'single'            => true,
+            'show_in_rest'      => true,
+            'sanitize_callback' => 'sanitize_text_field',
+            'auth_callback'     => fn() => current_user_can( 'manage_options' ),
+        ] );
     }
 
     // -------------------------------------------------------------------------
@@ -38,12 +49,12 @@ class SIE_Topic_API {
 
     public function get_topics( WP_REST_Request $request ) {
         $terms = get_terms( [
-            'taxonomy'   => 'knowledge_topics',
+            'taxonomy'   => 'knowledge_topic',
             'hide_empty' => false,
         ] );
 
         if ( is_wp_error( $terms ) ) {
-            return new WP_Error( 'sie_terms_error', 'Could not retrieve topics.', [ 'status' => 500 ] );
+            return new WP_Error( 'sie_terms_error', $terms->get_error_message(), [ 'status' => 500 ] );
         }
 
         $mapping = [];
