@@ -15,3 +15,6 @@ venv/
 .DS_Store
 Thumbs.db
 nul
+
+# OpenMemory - IDE/Assistant specific rules
+.cursor\rules\openmemory.mdc

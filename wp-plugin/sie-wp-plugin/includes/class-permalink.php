@@ -13,7 +13,13 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class SIE_Permalink {
 
     public function init() {
+        // Try to catch the CPT registration event (may already have fired).
         add_action( 'registered_post_type_knowledge_base', [ $this, 'override_rewrite' ], 10, 2 );
+
+        // Fallback: if the CPT was already registered before this plugin loaded,
+        // override the permastruct directly during init.
+        add_action( 'init', [ $this, 'late_override_rewrite' ], 98 );
+
         add_filter( 'post_type_link',                      [ $this, 'resolve_link' ], 10, 2 );
         add_action( 'init',                                [ $this, 'add_rewrite_rules' ], 99 );
     }
@@ -35,6 +41,32 @@ class SIE_Permalink {
             'ep_mask'  => EP_NONE,
             'paged'    => false,
             'feed'     => false,
+            'walk_dirs' => false,
+        ];
+    }
+
+    /**
+     * Fallback: override the permastruct if the CPT was registered before
+     * this plugin loaded (common with CPT UI which runs on init priority 9).
+     */
+    public function late_override_rewrite() {
+        global $wp_rewrite;
+
+        if ( ! post_type_exists( 'knowledge_base' ) ) {
+            return;
+        }
+
+        // Only override if the permastruct hasn't been set correctly yet.
+        if ( isset( $wp_rewrite->extra_permastructs['knowledge_base'] )
+             && false !== strpos( $wp_rewrite->extra_permastructs['knowledge_base']['struct'], '%knowledge_topic%' ) ) {
+            return; // Already set by override_rewrite().
+        }
+
+        $wp_rewrite->extra_permastructs['knowledge_base'] = [
+            'struct'    => '/kb/%knowledge_topic%/%knowledge_base%',
+            'ep_mask'   => EP_NONE,
+            'paged'     => false,
+            'feed'      => false,
             'walk_dirs' => false,
         ];
     }
