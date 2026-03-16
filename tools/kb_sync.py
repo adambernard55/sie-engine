@@ -827,13 +827,20 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
     return result
 
 
-def sync_all(dry_run: bool = False, filter_path: str = None) -> list[dict]:
+def sync_all(
+    dry_run: bool = False,
+    filter_path: str = None,
+    batch_size: int = 0,
+    offset: int = 0,
+) -> list[dict]:
     """
-    Sync all markdown files in the knowledge base.
+    Sync markdown files in the knowledge base.
 
     Args:
         dry_run: If True, only show what would be synced
         filter_path: Optional path filter (e.g., "AI/" to only sync AI folder)
+        batch_size: Max files to process (0 = unlimited)
+        offset: Number of files to skip before processing
 
     Returns:
         List of sync results
@@ -850,18 +857,32 @@ def sync_all(dry_run: bool = False, filter_path: str = None) -> list[dict]:
         except json.JSONDecodeError:
             existing_mapping = {}
 
-    # Find all markdown files
-    for md_file in KB_ROOT.rglob("*.md"):
-        # Apply filter if specified
+    # Collect all syncable files first (sorted for deterministic batching)
+    all_files = []
+    for md_file in sorted(KB_ROOT.rglob("*.md")):
         if filter_path:
             relative = str(md_file.relative_to(KB_ROOT))
             if not relative.startswith(filter_path.replace("/", os.sep)):
                 continue
-
         if not should_sync_file(md_file):
             continue
+        all_files.append(md_file)
 
-        print(f"Processing: {md_file.relative_to(KB_ROOT)}")
+    total = len(all_files)
+    print(f"Found {total} syncable files")
+
+    # Apply offset and batch size
+    if offset > 0:
+        all_files = all_files[offset:]
+        print(f"Skipping first {offset} files (offset)")
+    if batch_size > 0:
+        all_files = all_files[:batch_size]
+        print(f"Processing batch of {len(all_files)} files (batch_size={batch_size})")
+    else:
+        print(f"Processing all {len(all_files)} files")
+
+    for i, md_file in enumerate(all_files, 1):
+        print(f"\n[{i}/{len(all_files)}] Processing: {md_file.relative_to(KB_ROOT)}")
         result = sync_file(md_file, wp_client, dry_run=dry_run, existing_mapping=existing_mapping)
         results.append(result)
 
@@ -878,6 +899,10 @@ def sync_all(dry_run: bool = False, filter_path: str = None) -> list[dict]:
             print(f"    Error: {result['error']}")
         if result.get("pinecone"):
             print(f"    Pinecone: {result['pinecone']}")
+
+    if batch_size > 0 and offset + batch_size < total:
+        next_offset = offset + batch_size
+        print(f"\n--- Batch complete. Next batch: --offset {next_offset} ---")
 
     return results
 
@@ -1033,6 +1058,8 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Show what would be synced without making changes")
     parser.add_argument("--file", type=str, help="Sync a specific file (relative to kb root)")
     parser.add_argument("--filter", type=str, help="Filter by path prefix (e.g., 'AI/' or 'SEO/')")
+    parser.add_argument("--batch-size", type=int, default=0, help="Max files per run (0 = unlimited, e.g., 50)")
+    parser.add_argument("--offset", type=int, default=0, help="Skip this many files before processing (for pagination)")
     parser.add_argument("--export-redirects", action="store_true", help="Export CSV of old→new URL redirects for Rank Math")
 
     args = parser.parse_args()
@@ -1059,7 +1086,12 @@ if __name__ == "__main__":
         result = sync_file_by_path(args.file, dry_run=args.dry_run)
         print(json.dumps(result, indent=2))
     else:
-        results = sync_all(dry_run=args.dry_run, filter_path=args.filter)
+        results = sync_all(
+            dry_run=args.dry_run,
+            filter_path=args.filter,
+            batch_size=args.batch_size,
+            offset=args.offset,
+        )
 
         # Summary
         print("\n" + "=" * 60)
