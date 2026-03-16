@@ -1,27 +1,3 @@
----
-title: SIE Engine
-id: 20260102084354
-version: "1.2"
-steward: Adam Bernard
-updated: 2026-03-15
-status: Active
-doc_type: Reference
-summary: Core engine for the Strategic Intelligence Engine — an AI-powered knowledge base platform that syncs Obsidian vaults to WordPress and serves RAG-powered chat.
-tags:
-  - sie
-  - engine
-  - ai
-  - knowledge-base
-  - wordpress
-  - pinecone
-relations:
-  - "ABC/03_Engine/sie-adambernard"
-  - "HATS/03_Engine/sie-bernardhats"
-aliases:
-  - sie-engine
-  - SIE Core
----
-
 # SIE Engine
 
 Core engine for the **Strategic Intelligence Engine** — a multi-site platform that turns an Obsidian knowledge vault into a WordPress-hosted, AI-searchable knowledge base.
