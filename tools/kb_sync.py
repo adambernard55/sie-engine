@@ -112,14 +112,23 @@ def _load_config(config_path: str = None) -> None:
     WP_USERNAME = os.getenv("WP_USERNAME") or config.get("wp_username", "")
     WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")   # credentials: .env only
 
-    # Topic taxonomy — try live WP endpoint first, fall back to config.yaml
-    TOPIC_MAPPING = _fetch_wp_topic_mapping(WP_SITE_URL, WP_USERNAME, WP_APP_PASSWORD)
-    if TOPIC_MAPPING:
+    # Topic taxonomy — merge live WP endpoint with config.yaml.
+    # config.yaml is the baseline; live API adds/overrides with current WP state.
+    config_mapping = config.get("topic_mapping") or {}
+    live_mapping = _fetch_wp_topic_mapping(WP_SITE_URL, WP_USERNAME, WP_APP_PASSWORD)
+
+    if config_mapping and live_mapping:
+        # Merge: start with config, overlay live (live wins on conflicts)
+        TOPIC_MAPPING = {**config_mapping, **live_mapping}
+        print(f"Topic mapping: {len(live_mapping)} from WordPress + {len(config_mapping)} from config.yaml = {len(TOPIC_MAPPING)} merged")
+    elif live_mapping:
+        TOPIC_MAPPING = live_mapping
         print(f"Topic mapping: fetched {len(TOPIC_MAPPING)} topics from WordPress")
+    elif config_mapping:
+        TOPIC_MAPPING = config_mapping
+        print(f"Topic mapping: loaded {len(TOPIC_MAPPING)} topics from config.yaml")
     else:
-        TOPIC_MAPPING = config.get("topic_mapping") or {}
-        if TOPIC_MAPPING:
-            print(f"Topic mapping: loaded {len(TOPIC_MAPPING)} topics from config.yaml")
+        TOPIC_MAPPING = {}
 
     PARENT_TOPIC_IDS = config.get("parent_topics") or {}
     DEFAULT_TOPIC_ID = int(
