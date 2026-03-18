@@ -54,6 +54,13 @@ TOPIC_MAPPING: dict = {}
 PARENT_TOPIC_IDS: dict = {}
 DEFAULT_TOPIC_ID: int = 0
 
+# Configurable post type, taxonomy, and URL prefix.
+# Defaults match the original knowledge CPT setup for backward compatibility.
+WP_POST_TYPE: str = "knowledge"          # WP REST base for CRUD
+WP_TAXONOMY: str = "knowledge_topics"    # hierarchical taxonomy field name
+WP_TAG_TAXONOMY: str = "knowledge_tag"   # flat tag taxonomy field name
+URL_PREFIX: str = "kb"                   # URL path prefix (e.g. /kb/slug/)
+
 
 def _find_config_file(explicit_path: str = None) -> Optional[Path]:
     """Locate config.yaml using a priority chain.
@@ -89,6 +96,7 @@ def _load_config(config_path: str = None) -> None:
     """
     global KB_ROOT, WP_SITE_URL, WP_USERNAME, WP_APP_PASSWORD
     global TOPIC_MAPPING, PARENT_TOPIC_IDS, DEFAULT_TOPIC_ID
+    global WP_POST_TYPE, WP_TAXONOMY, WP_TAG_TAXONOMY, URL_PREFIX
 
     config_file = _find_config_file(config_path)
     config: dict = {}
@@ -134,6 +142,12 @@ def _load_config(config_path: str = None) -> None:
     DEFAULT_TOPIC_ID = int(
         config.get("default_topic_id") or os.getenv("DEFAULT_TOPIC_ID", "0")
     )
+
+    # Configurable post type and taxonomy — defaults preserve backward compat.
+    WP_POST_TYPE = config.get("wp_post_type", "knowledge")
+    WP_TAXONOMY = config.get("wp_taxonomy", "knowledge_topics")
+    WP_TAG_TAXONOMY = config.get("wp_tag_taxonomy", "knowledge_tag")
+    URL_PREFIX = config.get("url_prefix", "kb")
 
 
 def _fetch_wp_topic_mapping(site_url: str, username: str, app_password: str) -> dict:
@@ -188,8 +202,8 @@ class WordPressClient:
         })
 
     def get_post_by_slug(self, slug: str) -> Optional[dict]:
-        """Check if a knowledge post exists by slug."""
-        url = f"{self.site_url}/wp-json/wp/v2/knowledge"
+        """Check if a post exists by slug."""
+        url = f"{self.site_url}/wp-json/wp/v2/{WP_POST_TYPE}"
         response = self.session.get(url, params={"slug": slug})
         if response.status_code == 200:
             posts = response.json()
@@ -197,12 +211,12 @@ class WordPressClient:
         return None
 
     def search_post_by_title(self, title: str) -> Optional[dict]:
-        """Search for a knowledge post by exact title match.
+        """Search for a post by exact title match.
 
         Uses the WP REST API search parameter then filters for an exact match
         to avoid false positives on partial title overlaps.
         """
-        url = f"{self.site_url}/wp-json/wp/v2/knowledge"
+        url = f"{self.site_url}/wp-json/wp/v2/{WP_POST_TYPE}"
         response = self.session.get(url, params={"search": title, "per_page": 5})
         if response.status_code == 200:
             posts = response.json()
@@ -215,16 +229,16 @@ class WordPressClient:
         return None
 
     def create_post(self, payload: dict) -> dict:
-        """Create a new knowledge post."""
-        url = f"{self.site_url}/wp-json/wp/v2/knowledge"
+        """Create a new post."""
+        url = f"{self.site_url}/wp-json/wp/v2/{WP_POST_TYPE}"
         response = self.session.post(url, json=payload)
         if response.status_code >= 400:
             raise Exception(f"{response.status_code} Error: {response.text[:500]}")
         return response.json()
 
     def update_post(self, post_id: int, payload: dict) -> dict:
-        """Update an existing knowledge post."""
-        url = f"{self.site_url}/wp-json/wp/v2/knowledge/{post_id}"
+        """Update an existing post."""
+        url = f"{self.site_url}/wp-json/wp/v2/{WP_POST_TYPE}/{post_id}"
         response = self.session.put(url, json=payload)
         if response.status_code >= 400:
             raise Exception(f"{response.status_code} Error: {response.text[:500]}")
@@ -235,7 +249,7 @@ class WordPressClient:
         slug = re.sub(r'[^a-z0-9-]', '-', tag_name.lower())
 
         # Check if tag exists
-        url = f"{self.site_url}/wp-json/wp/v2/knowledge_tag"
+        url = f"{self.site_url}/wp-json/wp/v2/{WP_TAG_TAXONOMY}"
         response = self.session.get(url, params={"slug": slug})
         if response.status_code == 200:
             tags = response.json()
@@ -400,7 +414,7 @@ def convert_wikilink_to_url(match: re.Match) -> str:
             display_text = re.sub(rf'\b{acronym.title()}\b', acronym, display_text, flags=re.IGNORECASE)
 
     # Build the URL
-    url = f"/kb/{slug}/"
+    url = f"/{URL_PREFIX}/{slug}/"
     if heading:
         # Convert heading to anchor format
         anchor = heading.lower()
@@ -655,7 +669,7 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
         # Use frontmatter slug if specified, otherwise generate from title
         slug = frontmatter.get("slug") or generate_path_slug(file_path, KB_ROOT)
         excerpt = frontmatter.get("excerpt") or frontmatter.get("summary", "")
-        tags = frontmatter.get("tags", [])
+        tags = frontmatter.get("tags") or []
         if isinstance(tags, str):
             tags = [t.strip() for t in tags.split(",")]
 
@@ -667,8 +681,8 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
 
         # AI/RAG fields
         semantic_summary = frontmatter.get("semantic_summary", "")
-        synthetic_questions = frontmatter.get("synthetic_questions", [])
-        key_concepts = frontmatter.get("key_concepts", [])
+        synthetic_questions = frontmatter.get("synthetic_questions") or []
+        key_concepts = frontmatter.get("key_concepts") or []
 
         # Date - WordPress requires full ISO 8601 with time
         updated = frontmatter.get("updated", "")
@@ -711,8 +725,8 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
             "title": title,
             "content": html_content,
             "status": "publish",
-            "knowledge_topics": all_topic_ids,
-            "knowledge_tag": tag_ids
+            WP_TAXONOMY: all_topic_ids,
+            WP_TAG_TAXONOMY: tag_ids
         }
 
         if excerpt:
@@ -776,7 +790,7 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
                 result["status"] = "created"
 
         result["post_id"] = post["id"]
-        result["url"] = post.get("link", f"{WP_SITE_URL}/kb/{slug}/")
+        result["url"] = post.get("link", f"{WP_SITE_URL}/{URL_PREFIX}/{slug}/")
         result["title"] = title
 
         # Update Rank Math SEO meta (uses dedicated Rank Math API)
@@ -815,9 +829,9 @@ def sync_file(file_path: Path, wp_client: WordPressClient, dry_run: bool = False
                 content=chunk["content"],
                 doc_id=vector_id,
                 title=title,
-                source=f"{WP_SITE_URL}/kb/{slug}/",
+                source=f"{WP_SITE_URL}/{URL_PREFIX}/{slug}/",
                 date=updated or datetime.now().isoformat(),
-                post_type="knowledge_base",
+                post_type=WP_POST_TYPE,
                 url=result["url"],
                 tags=tags if isinstance(tags, list) else [],
                 key_concepts=key_concepts if isinstance(key_concepts, list) else [],
@@ -978,7 +992,7 @@ def save_mapping_file(results: list[dict]) -> None:
 
             existing_mapping[rel_path] = {
                 "post_id": result.get("post_id"),
-                "slug": result.get("url", "").split("/kb/")[-1].rstrip("/") if "/kb/" in result.get("url", "") else "",
+                "slug": result.get("url", "").split(f"/{URL_PREFIX}/")[-1].rstrip("/") if f"/{URL_PREFIX}/" in result.get("url", "") else "",
                 "url": result.get("url"),
                 "title": result.get("title", ""),
                 "last_synced": timestamp
@@ -1017,13 +1031,13 @@ def export_redirects_csv(output_path: Path = None) -> Path:
 
     for rel_path, data in mapping.items():
         old_slug = data.get("slug", "")
-        old_url = f"/kb/{old_slug}/"
+        old_url = f"/{URL_PREFIX}/{old_slug}/"
 
         # Calculate new path-based slug
         file_path = KB_ROOT / rel_path
         if file_path.exists():
             new_slug = generate_path_slug(file_path, KB_ROOT)
-            new_url = f"/kb/{new_slug}/"
+            new_url = f"/{URL_PREFIX}/{new_slug}/"
 
             # Only add if the slug actually changed
             if old_slug != new_slug:
