@@ -1,13 +1,16 @@
 <?php
 /**
- * SIE Custom Post Types — FAQ, Pro Tip, Guide
+ * SIE Custom Post Types & Taxonomies
  *
- * Three universal CPTs that power the chat's knowledge triad:
+ * Knowledge Base — the primary CPT for synced KB articles, with a
+ * hierarchical knowledge_topic taxonomy for /kb/topic/subtopic/post/ URLs.
+ *
+ * Knowledge triad (FAQ, Pro Tip, Guide) — three CPTs that power the chat:
  *   - FAQ       → "What" (declarative knowledge, definitions, comparisons)
  *   - Pro Tip   → "How"  (procedural, actionable guidance)
  *   - Guide     → "Which/When" (decision support, recommendations)
  *
- * Shared taxonomy: sie_topic — connects all three CPTs (and optionally
+ * Shared taxonomy: sie_topic — connects all three triad CPTs (and optionally
  * posts/products) so the chat can filter by subject area.
  */
 
@@ -25,6 +28,22 @@ class SIE_CPT {
     // -------------------------------------------------------------------------
 
     public function register_post_types() {
+
+        // Knowledge Base — primary CPT for synced KB articles
+        register_post_type( 'knowledge_base', [
+            'labels' => self::labels( 'Knowledge Base', 'Knowledge Base' ),
+            'public'              => true,
+            'publicly_queryable'  => true,
+            'has_archive'         => 'kb',
+            'rewrite'             => [ 'slug' => 'kb/%knowledge_topic%', 'with_front' => false ],
+            'menu_icon'           => 'dashicons-book-alt',
+            'menu_position'       => 24,
+            'supports'            => [ 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions' ],
+            'show_in_rest'        => true,
+            'rest_base'           => 'knowledge-base',
+            'show_in_nav_menus'   => true,
+            'taxonomies'          => [ 'knowledge_topic' ],
+        ] );
 
         // FAQ — "What is...?"
         register_post_type( 'sie_faq', [
@@ -74,6 +93,32 @@ class SIE_CPT {
     // -------------------------------------------------------------------------
 
     public function register_taxonomies() {
+
+        // knowledge_topic — hierarchical taxonomy for Knowledge Base articles
+        register_taxonomy( 'knowledge_topic', [ 'knowledge_base' ], [
+            'labels' => [
+                'name'              => 'Knowledge Topics',
+                'singular_name'     => 'Knowledge Topic',
+                'search_items'      => 'Search Knowledge Topics',
+                'all_items'         => 'All Knowledge Topics',
+                'parent_item'       => 'Parent Topic',
+                'parent_item_colon' => 'Parent Topic:',
+                'edit_item'         => 'Edit Knowledge Topic',
+                'update_item'       => 'Update Knowledge Topic',
+                'add_new_item'      => 'Add New Knowledge Topic',
+                'new_item_name'     => 'New Knowledge Topic Name',
+                'menu_name'         => 'Knowledge Topics',
+            ],
+            'hierarchical'      => true,
+            'public'            => true,
+            'publicly_queryable' => true,
+            'show_ui'           => true,
+            'show_in_rest'      => true,
+            'rest_base'         => 'knowledge-topics',
+            'show_in_nav_menus' => true,
+            'rewrite'           => [ 'slug' => 'kb-topic', 'with_front' => false, 'hierarchical' => true ],
+            'show_admin_column' => true,
+        ] );
 
         // sie_topic — shared across FAQ, Pro Tip, Guide (and optionally post/product)
         register_taxonomy( 'sie_topic', [ 'sie_faq', 'sie_pro_tip', 'sie_guide' ], [
