@@ -50,12 +50,6 @@ your-instance/
 └── engine/               ← git submodule → sie-engine
 ```
 
-**Active instances:**
-
-| Instance | Site | Location |
-|----------|------|----------|
-| `sie-adambernard` | adambernard.com | `ABC/03_Engine/sie-adambernard` |
-| `sie-bernardhats` | bernardhats.com | `HATS/03_Engine/sie-bernardhats` |
 
 ## Setup
 
