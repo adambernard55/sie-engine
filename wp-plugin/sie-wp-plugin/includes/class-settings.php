@@ -11,6 +11,7 @@ class SIE_Settings {
         // API keys
         'sie_openai_api_key'     => '',
         'sie_anthropic_api_key'  => '',
+        'sie_gemini_api_key'     => '',
         'sie_pinecone_api_key'   => '',
         'sie_pinecone_host'      => '',
         'sie_pinecone_index'     => '',
@@ -18,6 +19,7 @@ class SIE_Settings {
         'sie_llm_provider'       => 'openai',
         'sie_openai_model'       => 'gpt-4o-mini',
         'sie_anthropic_model'    => 'claude-sonnet-4-5-20250514',
+        'sie_gemini_model'       => 'gemini-2.5-flash',
         'sie_temperature'        => '0.2',
         // Chat widget
         'sie_chat_access'        => 'logged_in',
@@ -80,6 +82,13 @@ class SIE_Settings {
                             <p class="description">Used for chat completions when Anthropic is selected. Embeddings still use OpenAI.</p></td>
                     </tr>
                     <tr>
+                        <th><label for="sie_gemini_api_key">Google Gemini API Key</label></th>
+                        <td><input type="password" name="sie_gemini_api_key" id="sie_gemini_api_key"
+                                   value="<?php echo esc_attr( get_option( 'sie_gemini_api_key' ) ); ?>"
+                                   class="regular-text" autocomplete="off" />
+                            <p class="description">Used for chat completions when Gemini is selected. Embeddings still use OpenAI.</p></td>
+                    </tr>
+                    <tr>
                         <th><label for="sie_pinecone_api_key">Pinecone API Key</label></th>
                         <td><input type="password" name="sie_pinecone_api_key" id="sie_pinecone_api_key"
                                    value="<?php echo esc_attr( get_option( 'sie_pinecone_api_key' ) ); ?>"
@@ -109,6 +118,7 @@ class SIE_Settings {
                             <select name="sie_llm_provider" id="sie_llm_provider">
                                 <option value="openai"    <?php selected( $provider, 'openai'    ); ?>>OpenAI</option>
                                 <option value="anthropic" <?php selected( $provider, 'anthropic' ); ?>>Anthropic (Claude)</option>
+                                <option value="gemini"    <?php selected( $provider, 'gemini'    ); ?>>Google (Gemini)</option>
                             </select>
                         </td>
                     </tr>
@@ -133,6 +143,16 @@ class SIE_Settings {
                                 <option value="claude-haiku-4-5-20251001"  <?php selected( $amodel, 'claude-haiku-4-5-20251001'  ); ?>>Claude Haiku 4.5 (fast, low cost)</option>
                                 <option value="claude-sonnet-4-5-20250514" <?php selected( $amodel, 'claude-sonnet-4-5-20250514' ); ?>>Claude Sonnet 4.5 (balanced)</option>
                                 <option value="claude-opus-4-6"            <?php selected( $amodel, 'claude-opus-4-6'            ); ?>>Claude Opus 4.6 (most capable)</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr id="sie_gemini_model_row" <?php echo $provider !== 'gemini' ? 'style="display:none"' : ''; ?>>
+                        <th><label for="sie_gemini_model">Gemini Model</label></th>
+                        <td>
+                            <?php $gmodel = get_option( 'sie_gemini_model', 'gemini-2.5-flash' ); ?>
+                            <select name="sie_gemini_model" id="sie_gemini_model">
+                                <option value="gemini-2.5-flash"   <?php selected( $gmodel, 'gemini-2.5-flash'   ); ?>>Gemini 2.5 Flash (fast, low cost)</option>
+                                <option value="gemini-2.5-pro"     <?php selected( $gmodel, 'gemini-2.5-pro'     ); ?>>Gemini 2.5 Pro (balanced)</option>
                             </select>
                         </td>
                     </tr>
@@ -254,6 +274,7 @@ class SIE_Settings {
         document.getElementById('sie_llm_provider').addEventListener('change', function () {
             document.getElementById('sie_openai_model_row').style.display    = this.value === 'openai'    ? '' : 'none';
             document.getElementById('sie_anthropic_model_row').style.display = this.value === 'anthropic' ? '' : 'none';
+            document.getElementById('sie_gemini_model_row').style.display    = this.value === 'gemini'    ? '' : 'none';
         });
         // Toggle role row
         document.getElementById('sie_chat_access').addEventListener('change', function () {

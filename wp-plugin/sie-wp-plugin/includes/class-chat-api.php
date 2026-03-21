@@ -118,6 +118,12 @@ class SIE_Chat_API {
         if ( $provider === 'openai' ) {
             $model   = get_option( 'sie_openai_model', 'gpt-4o-mini' );
             $llm_key = $openai_key;
+        } elseif ( $provider === 'gemini' ) {
+            $model   = get_option( 'sie_gemini_model', 'gemini-2.5-flash' );
+            $llm_key = get_option( 'sie_gemini_api_key', '' );
+            if ( ! $llm_key ) {
+                return new WP_Error( 'sie_not_configured', 'Gemini API key is not configured.', [ 'status' => 503 ] );
+            }
         } else {
             $model   = get_option( 'sie_anthropic_model', 'claude-sonnet-4-5-20250514' );
             $llm_key = get_option( 'sie_anthropic_api_key', '' );
@@ -178,6 +184,8 @@ class SIE_Chat_API {
 
         if ( $provider === 'openai' ) {
             $response = $this->ask_openai( $query, $context, $llm_key, $model, $temperature );
+        } elseif ( $provider === 'gemini' ) {
+            $response = $this->ask_gemini( $query, $context, $llm_key, $model, $temperature );
         } else {
             $response = $this->ask_anthropic( $query, $context, $llm_key, $model, $temperature );
         }
@@ -354,6 +362,50 @@ class SIE_Chat_API {
         $text = $body['content'][0]['text'] ?? null;
 
         return $text ?? new WP_Error( 'sie_anthropic_error', 'Anthropic response failed.' );
+    }
+
+    // -------------------------------------------------------------------------
+    // Gemini completion
+    // -------------------------------------------------------------------------
+
+    private function ask_gemini( $query, $context, $api_key, $model, $temperature ) {
+        $system = get_option(
+            'sie_system_prompt',
+            'You are a knowledgeable assistant. Answer based only on the provided context. ' .
+            'If the context does not contain the answer, say so clearly. ' .
+            'Cite source URLs when referencing specific information.'
+        );
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $api_key;
+
+        $res = wp_remote_post( $url, [
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+            'body'    => wp_json_encode( [
+                'systemInstruction' => [
+                    'parts' => [ [ 'text' => $system ] ],
+                ],
+                'contents' => [
+                    [
+                        'role'  => 'user',
+                        'parts' => [ [ 'text' => "Context:\n{$context}\n\nQuestion: {$query}" ] ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'temperature'     => $temperature,
+                    'maxOutputTokens' => 800,
+                ],
+            ] ),
+            'timeout' => 30,
+        ] );
+
+        if ( is_wp_error( $res ) ) return $res;
+
+        $body = json_decode( wp_remote_retrieve_body( $res ), true );
+        $text = $body['candidates'][0]['content']['parts'][0]['text'] ?? null;
+
+        return $text ?? new WP_Error( 'sie_gemini_error', 'Gemini response failed.' );
     }
 
     // -------------------------------------------------------------------------
