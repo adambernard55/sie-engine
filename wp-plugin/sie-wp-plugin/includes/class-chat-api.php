@@ -20,10 +20,14 @@ class SIE_Chat_API {
     /** Max queries per day (all users combined) — cost ceiling. 0 = unlimited. */
     const DAILY_LIMIT_OPTION = 'sie_daily_query_limit';
 
+    /** Track whether [sie_chat_page] was rendered on this request. */
+    private $page_chat_active = false;
+
     public function init() {
         add_action( 'rest_api_init',       [ $this, 'register_routes' ] );
         add_action( 'wp_enqueue_scripts',  [ $this, 'enqueue_assets'  ] );
         add_shortcode( 'sie_chat',         [ $this, 'render_widget'   ] );
+        add_shortcode( 'sie_chat_page',    [ $this, 'render_page_chat' ] );
     }
 
     // -------------------------------------------------------------------------
@@ -422,30 +426,53 @@ class SIE_Chat_API {
     public function enqueue_assets() {
         if ( ! $this->user_can_see_widget() ) return;
 
-        wp_enqueue_style(
-            'sie-chat',
-            SIE_PLUGIN_URL . 'assets/chat-widget.css',
-            [],
-            SIE_VERSION
-        );
-        wp_enqueue_script(
-            'sie-chat',
-            SIE_PLUGIN_URL . 'assets/chat-widget.js',
-            [],
-            SIE_VERSION,
-            true
-        );
-        wp_localize_script( 'sie-chat', 'sieChat', [
+        // Shared localized data for both widget and page chat
+        $localized = [
             'apiUrl'      => rest_url( 'sie/v1/chat' ),
             'feedbackUrl' => rest_url( 'sie/v1/chat-feedback' ),
             'nonce'       => wp_create_nonce( 'wp_rest' ),
             'title'       => get_option( 'sie_chat_title', 'Ask the Knowledge Base' ),
-        ] );
+        ];
+
+        // Always register both — only enqueue widget if page chat isn't active
+        wp_register_style(  'sie-chat',      SIE_PLUGIN_URL . 'assets/chat-widget.css', [], SIE_VERSION );
+        wp_register_script( 'sie-chat',      SIE_PLUGIN_URL . 'assets/chat-widget.js',  [], SIE_VERSION, true );
+        wp_register_style(  'sie-chat-page', SIE_PLUGIN_URL . 'assets/chat-page.css',   [], SIE_VERSION );
+        wp_register_script( 'sie-chat-page', SIE_PLUGIN_URL . 'assets/chat-page.js',    [], SIE_VERSION, true );
+
+        // Localize both scripts with the same config
+        wp_localize_script( 'sie-chat',      'sieChat', $localized );
+        wp_localize_script( 'sie-chat-page', 'sieChat', $localized );
+
+        // Widget assets enqueue happens in wp_footer to check if page chat was rendered
+        add_action( 'wp_footer', [ $this, 'maybe_enqueue_widget' ], 1 );
     }
 
-    /** Shortcode [sie_chat] */
+    /**
+     * Enqueue widget assets only if the page chat shortcode was NOT used on this page.
+     */
+    public function maybe_enqueue_widget() {
+        if ( $this->page_chat_active ) return;
+        wp_enqueue_style( 'sie-chat' );
+        wp_enqueue_script( 'sie-chat' );
+    }
+
+    /** Shortcode [sie_chat] — floating widget bubble */
     public function render_widget( $atts ) {
         if ( ! $this->user_can_see_widget() ) return '';
+        if ( $this->page_chat_active ) return ''; // Don't show widget if page chat is on this page
         return '<div id="sie-chat-root"></div>';
+    }
+
+    /** Shortcode [sie_chat_page] — full-page search-style chat */
+    public function render_page_chat( $atts ) {
+        if ( ! $this->user_can_see_widget() ) return '';
+
+        $this->page_chat_active = true;
+
+        wp_enqueue_style( 'sie-chat-page' );
+        wp_enqueue_script( 'sie-chat-page' );
+
+        return '<div id="sie-chat-page-root"></div>';
     }
 }
