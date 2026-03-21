@@ -60,12 +60,18 @@ class SIE_CPT {
             'taxonomies'          => [ 'sie_topic' ],
         ] );
 
-        // Insight — "How do I...?"
+        // Insight / Hat Tips — "How do I...?"
+        // Labels and slug are filterable so instances can rebrand
+        // (e.g. "Hat Tips" for a hat site, "Insights" default).
+        $insight_singular = apply_filters( 'sie_insight_singular', 'Insight' );
+        $insight_plural   = apply_filters( 'sie_insight_plural',   'Insights' );
+        $insight_slug     = apply_filters( 'sie_insight_slug',     'insights' );
+
         register_post_type( 'sie_insight', [
-            'labels' => self::labels( 'Insight', 'Insights' ),
+            'labels' => self::labels( $insight_singular, $insight_plural ),
             'public'              => true,
             'has_archive'         => true,
-            'rewrite'             => [ 'slug' => 'insights', 'with_front' => false ],
+            'rewrite'             => [ 'slug' => $insight_slug, 'with_front' => false ],
             'menu_icon'           => 'dashicons-lightbulb',
             'menu_position'       => 26,
             'supports'            => [ 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions' ],
