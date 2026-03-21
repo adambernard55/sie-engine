@@ -8,14 +8,26 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class SIE_Settings {
 
     private const OPTIONS = [
-        'sie_openai_api_key'   => '',
-        'sie_pinecone_api_key' => '',
-        'sie_pinecone_host'    => '',
-        'sie_pinecone_index'   => '',
-        'sie_chat_access'      => 'logged_in',
-        'sie_chat_role'        => 'subscriber',
-        'sie_chat_title'       => 'Ask the Knowledge Base',
-        'sie_system_prompt'    => 'You are a knowledgeable assistant. Answer based only on the provided context. If the context does not contain the answer, say so clearly. Cite source URLs when referencing specific information.',
+        // API keys
+        'sie_openai_api_key'     => '',
+        'sie_anthropic_api_key'  => '',
+        'sie_pinecone_api_key'   => '',
+        'sie_pinecone_host'      => '',
+        'sie_pinecone_index'     => '',
+        // Model
+        'sie_llm_provider'       => 'openai',
+        'sie_openai_model'       => 'gpt-4o-mini',
+        'sie_anthropic_model'    => 'claude-sonnet-4-5-20250514',
+        'sie_temperature'        => '0.2',
+        // Chat widget
+        'sie_chat_access'        => 'logged_in',
+        'sie_chat_role'          => 'subscriber',
+        'sie_chat_title'         => 'Ask the Knowledge Base',
+        'sie_system_prompt'      => 'You are a knowledgeable assistant. Answer based only on the provided context. If the context does not contain the answer, say so clearly. Cite source URLs when referencing specific information.',
+        // Guardrails
+        'sie_confidence_threshold' => '0.6',
+        'sie_low_confidence_msg'   => 'I don\'t have enough information in the knowledge base to answer that confidently. Please try rephrasing or contact us directly.',
+        'sie_enable_logging'       => '1',
     ];
 
     public function init() {
@@ -41,20 +53,30 @@ class SIE_Settings {
 
     public function render_page() {
         if ( ! current_user_can( 'manage_options' ) ) return;
-        $access = get_option( 'sie_chat_access', 'logged_in' );
+        $access   = get_option( 'sie_chat_access', 'logged_in' );
+        $provider = get_option( 'sie_llm_provider', 'openai' );
         ?>
         <div class="wrap">
             <h1>SIE Settings</h1>
             <form method="post" action="options.php">
                 <?php settings_fields( 'sie_settings_group' ); ?>
 
+                <!-- ==================== API Credentials ==================== -->
                 <h2>API Credentials</h2>
                 <table class="form-table" role="presentation">
                     <tr>
                         <th><label for="sie_openai_api_key">OpenAI API Key</label></th>
                         <td><input type="password" name="sie_openai_api_key" id="sie_openai_api_key"
                                    value="<?php echo esc_attr( get_option( 'sie_openai_api_key' ) ); ?>"
-                                   class="regular-text" autocomplete="off" /></td>
+                                   class="regular-text" autocomplete="off" />
+                            <p class="description">Used for embeddings and chat completions (if OpenAI selected).</p></td>
+                    </tr>
+                    <tr>
+                        <th><label for="sie_anthropic_api_key">Anthropic API Key</label></th>
+                        <td><input type="password" name="sie_anthropic_api_key" id="sie_anthropic_api_key"
+                                   value="<?php echo esc_attr( get_option( 'sie_anthropic_api_key' ) ); ?>"
+                                   class="regular-text" autocomplete="off" />
+                            <p class="description">Used for chat completions when Anthropic is selected. Embeddings still use OpenAI.</p></td>
                     </tr>
                     <tr>
                         <th><label for="sie_pinecone_api_key">Pinecone API Key</label></th>
@@ -77,6 +99,89 @@ class SIE_Settings {
                     </tr>
                 </table>
 
+                <!-- ==================== Model Configuration ==================== -->
+                <h2>Model Configuration</h2>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th><label for="sie_llm_provider">LLM Provider</label></th>
+                        <td>
+                            <select name="sie_llm_provider" id="sie_llm_provider">
+                                <option value="openai"    <?php selected( $provider, 'openai'    ); ?>>OpenAI</option>
+                                <option value="anthropic" <?php selected( $provider, 'anthropic' ); ?>>Anthropic (Claude)</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr id="sie_openai_model_row" <?php echo $provider !== 'openai' ? 'style="display:none"' : ''; ?>>
+                        <th><label for="sie_openai_model">OpenAI Model</label></th>
+                        <td>
+                            <?php $omodel = get_option( 'sie_openai_model', 'gpt-4o-mini' ); ?>
+                            <select name="sie_openai_model" id="sie_openai_model">
+                                <option value="gpt-4o-mini" <?php selected( $omodel, 'gpt-4o-mini' ); ?>>GPT-4o Mini (fast, low cost)</option>
+                                <option value="gpt-4o"      <?php selected( $omodel, 'gpt-4o'      ); ?>>GPT-4o (balanced)</option>
+                                <option value="gpt-4.1"     <?php selected( $omodel, 'gpt-4.1'     ); ?>>GPT-4.1 (latest)</option>
+                                <option value="gpt-4.1-mini" <?php selected( $omodel, 'gpt-4.1-mini' ); ?>>GPT-4.1 Mini (latest, low cost)</option>
+                                <option value="o3-mini"     <?php selected( $omodel, 'o3-mini'     ); ?>>o3-mini (reasoning)</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr id="sie_anthropic_model_row" <?php echo $provider !== 'anthropic' ? 'style="display:none"' : ''; ?>>
+                        <th><label for="sie_anthropic_model">Anthropic Model</label></th>
+                        <td>
+                            <?php $amodel = get_option( 'sie_anthropic_model', 'claude-sonnet-4-5-20250514' ); ?>
+                            <select name="sie_anthropic_model" id="sie_anthropic_model">
+                                <option value="claude-haiku-4-5-20251001"  <?php selected( $amodel, 'claude-haiku-4-5-20251001'  ); ?>>Claude Haiku 4.5 (fast, low cost)</option>
+                                <option value="claude-sonnet-4-5-20250514" <?php selected( $amodel, 'claude-sonnet-4-5-20250514' ); ?>>Claude Sonnet 4.5 (balanced)</option>
+                                <option value="claude-opus-4-6"            <?php selected( $amodel, 'claude-opus-4-6'            ); ?>>Claude Opus 4.6 (most capable)</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="sie_temperature">Temperature</label></th>
+                        <td>
+                            <input type="range" name="sie_temperature" id="sie_temperature"
+                                   min="0" max="1" step="0.1"
+                                   value="<?php echo esc_attr( get_option( 'sie_temperature', '0.2' ) ); ?>" />
+                            <span id="sie_temp_value"><?php echo esc_html( get_option( 'sie_temperature', '0.2' ) ); ?></span>
+                            <p class="description">Lower = more factual/consistent. Higher = more creative. Recommended: 0.1–0.3 for enterprise.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- ==================== Guardrails ==================== -->
+                <h2>Guardrails &amp; Evaluation</h2>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th><label for="sie_confidence_threshold">Confidence Threshold</label></th>
+                        <td>
+                            <input type="range" name="sie_confidence_threshold" id="sie_confidence_threshold"
+                                   min="0" max="1" step="0.05"
+                                   value="<?php echo esc_attr( get_option( 'sie_confidence_threshold', '0.6' ) ); ?>" />
+                            <span id="sie_conf_value"><?php echo esc_html( get_option( 'sie_confidence_threshold', '0.6' ) ); ?></span>
+                            <p class="description">Minimum Pinecone similarity score. Below this, the low-confidence message is shown instead of querying the LLM.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="sie_low_confidence_msg">Low-Confidence Message</label></th>
+                        <td><textarea name="sie_low_confidence_msg" id="sie_low_confidence_msg"
+                                      rows="3" class="large-text"><?php
+                            echo esc_textarea( get_option( 'sie_low_confidence_msg', self::OPTIONS['sie_low_confidence_msg'] ) );
+                        ?></textarea>
+                        <p class="description">Shown when no KB content meets the confidence threshold — avoids hallucination.</p></td>
+                    </tr>
+                    <tr>
+                        <th><label for="sie_enable_logging">Chat Logging</label></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="sie_enable_logging" id="sie_enable_logging" value="1"
+                                       <?php checked( get_option( 'sie_enable_logging', '1' ), '1' ); ?> />
+                                Log all chat queries, responses, and sources for evaluation
+                            </label>
+                            <p class="description">Logs are stored in the database and viewable under Tools → SIE Chat Log.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- ==================== Chat Widget ==================== -->
                 <h2>Chat Widget</h2>
                 <table class="form-table" role="presentation">
                     <tr>
@@ -137,8 +242,21 @@ class SIE_Settings {
         </div>
 
         <script>
+        // Toggle provider model rows
+        document.getElementById('sie_llm_provider').addEventListener('change', function () {
+            document.getElementById('sie_openai_model_row').style.display    = this.value === 'openai'    ? '' : 'none';
+            document.getElementById('sie_anthropic_model_row').style.display = this.value === 'anthropic' ? '' : 'none';
+        });
+        // Toggle role row
         document.getElementById('sie_chat_access').addEventListener('change', function () {
             document.getElementById('sie_role_row').style.display = this.value === 'role' ? '' : 'none';
+        });
+        // Range sliders
+        document.getElementById('sie_temperature').addEventListener('input', function () {
+            document.getElementById('sie_temp_value').textContent = this.value;
+        });
+        document.getElementById('sie_confidence_threshold').addEventListener('input', function () {
+            document.getElementById('sie_conf_value').textContent = this.value;
         });
         </script>
         <?php
