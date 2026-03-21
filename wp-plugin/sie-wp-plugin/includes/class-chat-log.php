@@ -85,7 +85,11 @@ class SIE_Chat_Log {
         register_rest_route( 'sie/v1', '/chat-feedback', [
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [ $this, 'handle_feedback' ],
-            'permission_callback' => '__return_true',
+            'permission_callback' => function ( WP_REST_Request $request ) {
+                $nonce = $request->get_header( 'X-WP-Nonce' );
+                return $nonce && wp_verify_nonce( $nonce, 'wp_rest' );
+            },
+            'show_in_index'       => false,
             'args' => [
                 'log_id'   => [ 'required' => true, 'type' => 'integer' ],
                 'feedback' => [ 'required' => true, 'type' => 'string', 'enum' => [ 'positive', 'negative' ] ],

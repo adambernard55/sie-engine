@@ -13,6 +13,13 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 class SIE_Chat_API {
 
+    /** Max requests per IP per minute. */
+    const RATE_LIMIT     = 10;
+    const RATE_WINDOW    = 60; // seconds
+
+    /** Max queries per day (all users combined) — cost ceiling. 0 = unlimited. */
+    const DAILY_LIMIT_OPTION = 'sie_daily_query_limit';
+
     public function init() {
         add_action( 'rest_api_init',       [ $this, 'register_routes' ] );
         add_action( 'wp_enqueue_scripts',  [ $this, 'enqueue_assets'  ] );
@@ -28,6 +35,7 @@ class SIE_Chat_API {
             'methods'             => WP_REST_Server::CREATABLE,
             'callback'            => [ $this, 'handle_chat' ],
             'permission_callback' => [ $this, 'access_check' ],
+            'show_in_index'       => false,
             'args'                => [
                 'query' => [
                     'required'          => true,
@@ -38,7 +46,36 @@ class SIE_Chat_API {
         ] );
     }
 
-    public function access_check() {
+    public function access_check( WP_REST_Request $request ) {
+        // 1. Nonce verification — blocks requests not originating from our widget
+        $nonce = $request->get_header( 'X-WP-Nonce' );
+        if ( ! $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+            return new WP_Error( 'sie_invalid_nonce', 'Invalid or missing security token.', [ 'status' => 403 ] );
+        }
+
+        // 2. Rate limiting — per IP
+        $ip  = self::get_client_ip();
+        $key = 'sie_rate_' . md5( $ip );
+        $hits = (int) get_transient( $key );
+
+        if ( $hits >= self::RATE_LIMIT ) {
+            return new WP_Error( 'sie_rate_limited', 'Too many requests. Please wait a moment.', [ 'status' => 429 ] );
+        }
+
+        set_transient( $key, $hits + 1, self::RATE_WINDOW );
+
+        // 3. Daily cost ceiling
+        $daily_limit = (int) get_option( self::DAILY_LIMIT_OPTION, 0 );
+        if ( $daily_limit > 0 ) {
+            $today_key = 'sie_daily_count_' . gmdate( 'Y-m-d' );
+            $today_count = (int) get_transient( $today_key );
+            if ( $today_count >= $daily_limit ) {
+                return new WP_Error( 'sie_daily_limit', 'Daily query limit reached. Please try again tomorrow.', [ 'status' => 429 ] );
+            }
+            set_transient( $today_key, $today_count + 1, DAY_IN_SECONDS );
+        }
+
+        // 4. Access level check
         $access = get_option( 'sie_chat_access', 'logged_in' );
 
         if ( $access === 'public'    ) return true;
@@ -47,6 +84,23 @@ class SIE_Chat_API {
         // Role-based
         $role = get_option( 'sie_chat_role', 'subscriber' );
         return current_user_can( $role );
+    }
+
+    /**
+     * Get client IP, respecting Cloudflare and proxy headers.
+     */
+    private static function get_client_ip() {
+        foreach ( [ 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR' ] as $header ) {
+            if ( ! empty( $_SERVER[ $header ] ) ) {
+                // X-Forwarded-For may contain multiple IPs — take the first
+                $ip = strtok( $_SERVER[ $header ], ',' );
+                $ip = trim( $ip );
+                if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+                    return $ip;
+                }
+            }
+        }
+        return '0.0.0.0';
     }
 
     public function handle_chat( WP_REST_Request $request ) {

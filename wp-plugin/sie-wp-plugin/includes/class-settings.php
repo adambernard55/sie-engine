@@ -28,6 +28,7 @@ class SIE_Settings {
         'sie_confidence_threshold' => '0.6',
         'sie_low_confidence_msg'   => 'I don\'t have enough information in the knowledge base to answer that confidently. Please try rephrasing or contact us directly.',
         'sie_enable_logging'       => '1',
+        'sie_daily_query_limit'    => '0',
     ];
 
     public function init() {
@@ -167,6 +168,13 @@ class SIE_Settings {
                             echo esc_textarea( get_option( 'sie_low_confidence_msg', self::OPTIONS['sie_low_confidence_msg'] ) );
                         ?></textarea>
                         <p class="description">Shown when no KB content meets the confidence threshold — avoids hallucination.</p></td>
+                    </tr>
+                    <tr>
+                        <th><label for="sie_daily_query_limit">Daily Query Limit</label></th>
+                        <td><input type="number" name="sie_daily_query_limit" id="sie_daily_query_limit"
+                                   value="<?php echo esc_attr( get_option( 'sie_daily_query_limit', '0' ) ); ?>"
+                                   class="small-text" min="0" step="1" />
+                            <p class="description">Maximum chat queries per day across all users. 0 = unlimited. Protects against runaway API costs.</p></td>
                     </tr>
                     <tr>
                         <th><label for="sie_enable_logging">Chat Logging</label></th>
