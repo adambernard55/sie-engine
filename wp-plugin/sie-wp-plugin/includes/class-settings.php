@@ -25,6 +25,8 @@ class SIE_Settings {
         'sie_chat_access'        => 'logged_in',
         'sie_chat_role'          => 'subscriber',
         'sie_chat_title'         => 'Ask the Knowledge Base',
+        'sie_page_chat_title'    => 'Chat with an AI Expert',
+        'sie_page_chat_subtitle' => 'Ask anything — powered by our knowledge base.',
         'sie_system_prompt'      => 'You are a knowledgeable assistant. Answer based only on the provided context. If the context does not contain the answer, say so clearly. Cite source URLs when referencing specific information.',
         // Guardrails
         'sie_confidence_threshold' => '0.6',
@@ -283,7 +285,22 @@ class SIE_Settings {
                         <th><label for="sie_chat_title">Widget title</label></th>
                         <td><input type="text" name="sie_chat_title" id="sie_chat_title"
                                    value="<?php echo esc_attr( get_option( 'sie_chat_title', 'Ask the Knowledge Base' ) ); ?>"
-                                   class="regular-text" /></td>
+                                   class="regular-text" />
+                            <p class="description">Title shown in the floating chat bubble panel.</p></td>
+                    </tr>
+                    <tr>
+                        <th><label for="sie_page_chat_title">Page chat title</label></th>
+                        <td><input type="text" name="sie_page_chat_title" id="sie_page_chat_title"
+                                   value="<?php echo esc_attr( get_option( 'sie_page_chat_title', 'Chat with an AI Expert' ) ); ?>"
+                                   class="regular-text" />
+                            <p class="description">Heading shown above the search bar on <code>[sie_chat_page]</code> pages.</p></td>
+                    </tr>
+                    <tr>
+                        <th><label for="sie_page_chat_subtitle">Page chat subtitle</label></th>
+                        <td><input type="text" name="sie_page_chat_subtitle" id="sie_page_chat_subtitle"
+                                   value="<?php echo esc_attr( get_option( 'sie_page_chat_subtitle', 'Ask anything — powered by our knowledge base.' ) ); ?>"
+                                   class="regular-text" />
+                            <p class="description">Subtext below the title. Set the tone — e.g. "Chat with an AI SEO expert" or "Ask our product specialist".</p></td>
                     </tr>
                     <tr>
                         <th><label for="sie_system_prompt">System prompt</label></th>
@@ -299,7 +316,8 @@ class SIE_Settings {
 
             <hr>
             <h2>Usage</h2>
-            <p><strong>Chat widget:</strong> add <code>[sie_chat]</code> to any page or post.</p>
+            <p><strong>Chat widget (floating bubble):</strong> add <code>[sie_chat]</code> to any page or post.</p>
+            <p><strong>Chat page (search-style):</strong> add <code>[sie_chat_page]</code> for a full inline conversational search interface. The widget bubble auto-hides on pages with this shortcode.</p>
             <p><strong>Topic mapping endpoint:</strong>
                 <code><?php echo esc_url( rest_url( 'sie/v1/topics' ) ); ?></code>
                 — used automatically by kb_sync when credentials are configured.</p>

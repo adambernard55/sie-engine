@@ -3,10 +3,9 @@
 .sie-chat-page {
     max-width: 800px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 10px 20px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 15px;
-    min-height: 60vh;
     display: flex;
     flex-direction: column;
 }
@@ -183,25 +182,21 @@
     background: #fef2f2;
 }
 
-/* ---- Welcome state (no messages yet) ---- */
-.sie-chat-page .sie-welcome {
+/* ---- Header / welcome (above search bar) ---- */
+.sie-chat-page .sie-page-header {
     text-align: center;
-    color: #94a3b8;
-    padding: 60px 20px;
-}
-.sie-chat-page .sie-welcome-icon {
-    font-size: 48px;
     margin-bottom: 16px;
-    display: block;
 }
-.sie-chat-page .sie-welcome h2 {
-    color: #334155;
+.sie-chat-page .sie-page-header h2 {
+    color: #0f172a;
     font-size: 22px;
-    margin: 0 0 8px;
+    margin: 0 0 4px;
+    font-weight: 700;
 }
-.sie-chat-page .sie-welcome p {
+.sie-chat-page .sie-page-header p {
     margin: 0;
     font-size: 15px;
+    color: #64748b;
 }
 
 /* ---- Responsive ---- */

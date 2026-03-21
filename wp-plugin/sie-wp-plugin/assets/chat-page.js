@@ -9,21 +9,20 @@
         var root = document.getElementById('sie-chat-page-root');
         if (!root) return;
 
-        var title = cfg.title || 'Ask the Knowledge Base';
+        var title    = cfg.pageTitle || cfg.title || 'Chat with an AI Expert';
+        var subtitle = cfg.pageSubtitle || 'Ask anything — powered by our knowledge base.';
 
         root.innerHTML =
             '<div class="sie-chat-page">' +
+                '<div class="sie-page-header">' +
+                    '<h2>' + escHtml(title) + '</h2>' +
+                    '<p>' + escHtml(subtitle) + '</p>' +
+                '</div>' +
                 '<div class="sie-search-bar">' +
                     '<input type="text" class="sie-search-input" placeholder="Ask a question\u2026" autocomplete="off" />' +
                     '<button class="sie-search-btn" aria-label="Send">' + sendArrowSVG + '</button>' +
                 '</div>' +
-                '<div class="sie-conversation">' +
-                    '<div class="sie-welcome">' +
-                        '<span class="sie-welcome-icon">&#x1F50D;</span>' +
-                        '<h2>' + escHtml(title) + '</h2>' +
-                        '<p>Ask anything — answers come from our knowledge base.</p>' +
-                    '</div>' +
-                '</div>' +
+                '<div class="sie-conversation"></div>' +
             '</div>';
 
         var input = root.querySelector('.sie-search-input');

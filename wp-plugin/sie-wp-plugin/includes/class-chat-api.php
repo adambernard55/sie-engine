@@ -428,10 +428,12 @@ class SIE_Chat_API {
 
         // Shared localized data for both widget and page chat
         $localized = [
-            'apiUrl'      => rest_url( 'sie/v1/chat' ),
-            'feedbackUrl' => rest_url( 'sie/v1/chat-feedback' ),
-            'nonce'       => wp_create_nonce( 'wp_rest' ),
-            'title'       => get_option( 'sie_chat_title', 'Ask the Knowledge Base' ),
+            'apiUrl'        => rest_url( 'sie/v1/chat' ),
+            'feedbackUrl'   => rest_url( 'sie/v1/chat-feedback' ),
+            'nonce'         => wp_create_nonce( 'wp_rest' ),
+            'title'         => get_option( 'sie_chat_title', 'Ask the Knowledge Base' ),
+            'pageTitle'     => get_option( 'sie_page_chat_title', 'Chat with an AI Expert' ),
+            'pageSubtitle'  => get_option( 'sie_page_chat_subtitle', 'Ask anything — powered by our knowledge base.' ),
         ];
 
         // Always register both — only enqueue widget if page chat isn't active
