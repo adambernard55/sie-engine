@@ -52,6 +52,13 @@ class SIE_Settings {
         foreach ( self::OPTIONS as $key => $default ) {
             register_setting( 'sie_settings_group', $key, [ 'default' => $default ] );
         }
+        // Array option — connected CPTs
+        register_setting( 'sie_settings_group', 'sie_connected_cpts', [
+            'default'           => [],
+            'sanitize_callback' => function ( $value ) {
+                return is_array( $value ) ? array_map( 'sanitize_key', $value ) : [];
+            },
+        ] );
     }
 
     public function render_page() {
@@ -164,6 +171,38 @@ class SIE_Settings {
                                    value="<?php echo esc_attr( get_option( 'sie_temperature', '0.2' ) ); ?>" />
                             <span id="sie_temp_value"><?php echo esc_html( get_option( 'sie_temperature', '0.2' ) ); ?></span>
                             <p class="description">Lower = more factual/consistent. Higher = more creative. Recommended: 0.1–0.3 for enterprise.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- ==================== Connected Post Types ==================== -->
+                <h2>Connected Post Types</h2>
+                <p>Select additional post types to connect to the SIE ecosystem. Connected types get the <strong>SIE Topics</strong> taxonomy and are eligible for chat indexing. SIE's own types (Knowledge Base, FAQ, Insight, Guide) are always included.</p>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th>Post Types</th>
+                        <td>
+                            <?php
+                            $connected  = get_option( 'sie_connected_cpts', [] );
+                            if ( ! is_array( $connected ) ) $connected = [];
+                            $connectable = SIE_CPT::get_connectable_cpts();
+                            if ( $connectable ) :
+                                foreach ( $connectable as $slug => $label ) :
+                            ?>
+                                <label style="display:block;margin-bottom:6px;">
+                                    <input type="checkbox" name="sie_connected_cpts[]"
+                                           value="<?php echo esc_attr( $slug ); ?>"
+                                           <?php checked( in_array( $slug, $connected, true ) ); ?> />
+                                    <?php echo esc_html( $label ); ?>
+                                    <code style="color:#888;">(<?php echo esc_html( $slug ); ?>)</code>
+                                </label>
+                            <?php
+                                endforeach;
+                            else :
+                                echo '<p class="description">No additional public post types found.</p>';
+                            endif;
+                            ?>
+                            <p class="description" style="margin-top:10px;">Common types: Posts, Pages, Portfolio, Products (WooCommerce).</p>
                         </td>
                     </tr>
                 </table>

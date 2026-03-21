@@ -5,13 +5,13 @@
  * Knowledge Base — the primary CPT for synced KB articles, with a
  * hierarchical knowledge_topic taxonomy for /kb/topic/subtopic/post/ URLs.
  *
- * Knowledge triad (FAQ, Pro Tip, Guide) — three CPTs that power the chat:
- *   - FAQ       → "What" (declarative knowledge, definitions, comparisons)
- *   - Pro Tip   → "How"  (procedural, actionable guidance)
- *   - Guide     → "Which/When" (decision support, recommendations)
+ * Knowledge triad (FAQ, Insight, Guide) — three CPTs that power the chat:
+ *   - FAQ     → "What" (declarative knowledge, definitions, comparisons)
+ *   - Insight → "How"  (procedural, actionable guidance)
+ *   - Guide   → "Which/When" (decision support, recommendations)
  *
- * Shared taxonomy: sie_topic — connects all three triad CPTs (and optionally
- * posts/products) so the chat can filter by subject area.
+ * sie_topic taxonomy connects all triad CPTs plus any additional post types
+ * opted in via the "SIE-connected post types" setting.
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
@@ -21,6 +21,7 @@ class SIE_CPT {
     public function init() {
         add_action( 'init', [ $this, 'register_post_types' ] );
         add_action( 'init', [ $this, 'register_taxonomies' ] );
+        add_action( 'init', [ $this, 'connect_external_cpts' ], 99 );
     }
 
     // -------------------------------------------------------------------------
@@ -59,17 +60,17 @@ class SIE_CPT {
             'taxonomies'          => [ 'sie_topic' ],
         ] );
 
-        // Pro Tip — "How do I...?"
-        register_post_type( 'sie_pro_tip', [
-            'labels' => self::labels( 'Pro Tip', 'Pro Tips' ),
+        // Insight — "How do I...?"
+        register_post_type( 'sie_insight', [
+            'labels' => self::labels( 'Insight', 'Insights' ),
             'public'              => true,
             'has_archive'         => true,
-            'rewrite'             => [ 'slug' => 'pro-tips', 'with_front' => false ],
+            'rewrite'             => [ 'slug' => 'insights', 'with_front' => false ],
             'menu_icon'           => 'dashicons-lightbulb',
             'menu_position'       => 26,
             'supports'            => [ 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions' ],
             'show_in_rest'        => true,
-            'rest_base'           => 'pro-tips',
+            'rest_base'           => 'insights',
             'taxonomies'          => [ 'sie_topic' ],
         ] );
 
@@ -89,7 +90,7 @@ class SIE_CPT {
     }
 
     // -------------------------------------------------------------------------
-    // Shared Taxonomy
+    // Taxonomies
     // -------------------------------------------------------------------------
 
     public function register_taxonomies() {
@@ -120,8 +121,8 @@ class SIE_CPT {
             'show_admin_column' => true,
         ] );
 
-        // sie_topic — shared across FAQ, Pro Tip, Guide (and optionally post/product)
-        register_taxonomy( 'sie_topic', [ 'sie_faq', 'sie_pro_tip', 'sie_guide' ], [
+        // sie_topic — shared across triad CPTs + opted-in external CPTs
+        register_taxonomy( 'sie_topic', [ 'sie_faq', 'sie_insight', 'sie_guide' ], [
             'labels' => [
                 'name'              => 'SIE Topics',
                 'singular_name'     => 'SIE Topic',
@@ -142,6 +143,41 @@ class SIE_CPT {
             'rewrite'       => [ 'slug' => 'topic', 'with_front' => false ],
             'show_admin_column' => true,
         ] );
+    }
+
+    // -------------------------------------------------------------------------
+    // Connect external CPTs to sie_topic
+    // -------------------------------------------------------------------------
+
+    /**
+     * Attach sie_topic taxonomy to any additional post types selected in settings.
+     * Runs at priority 99 so all CPTs (Avada, Woo, etc.) are registered first.
+     */
+    public function connect_external_cpts() {
+        $connected = get_option( 'sie_connected_cpts', [] );
+        if ( ! is_array( $connected ) || empty( $connected ) ) return;
+
+        foreach ( $connected as $post_type ) {
+            if ( post_type_exists( $post_type ) ) {
+                register_taxonomy_for_object_type( 'sie_topic', $post_type );
+            }
+        }
+    }
+
+    /**
+     * Get all public post types available for connection (excludes SIE's own CPTs).
+     */
+    public static function get_connectable_cpts(): array {
+        $all = get_post_types( [ 'public' => true ], 'objects' );
+        $sie_types = [ 'knowledge_base', 'sie_faq', 'sie_insight', 'sie_guide', 'attachment' ];
+
+        $connectable = [];
+        foreach ( $all as $slug => $obj ) {
+            if ( in_array( $slug, $sie_types, true ) ) continue;
+            $connectable[ $slug ] = $obj->labels->name;
+        }
+
+        return $connectable;
     }
 
     // -------------------------------------------------------------------------
