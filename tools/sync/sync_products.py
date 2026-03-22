@@ -6,6 +6,30 @@ Push: Obsidian (.md) → WooCommerce products
 Pull: WooCommerce products → Obsidian (.md)
 
 Uses /wc/v3/ API with consumer key/secret authentication.
+
+Field mapping (frontmatter ↔ WooCommerce):
+    title           ↔ name
+    slug            ↔ slug
+    status          ↔ status
+    product_type    ↔ type  (simple, variable, grouped, external)
+    sku             ↔ sku
+    price           ↔ regular_price
+    sale_price      ↔ sale_price
+    stock_status    ↔ stock_status  (instock, outofstock, onbackorder)
+    manage_stock    ↔ manage_stock
+    stock_quantity  ↔ stock_quantity
+    weight          ↔ weight
+    dimensions      ↔ dimensions  {length, width, height}
+    categories      ↔ categories  (list of names)
+    tags            ↔ tags  (list of names)
+    attributes      ↔ attributes  {Name: [options]}
+    images          ↔ images  (list of URLs)
+    variations      ↔ variations  (list of variation IDs — pull only)
+    excerpt         ↔ short_description
+    featured        ↔ featured
+    primary_keyword ↔ meta_data[rank_math_focus_keyword]
+    meta_description↔ meta_data[rank_math_description]
+    seo_title       ↔ meta_data[rank_math_title]
 """
 
 import re
@@ -15,13 +39,28 @@ from typing import Optional
 
 from .base import (
     BaseSyncTool, SyncConfig,
-    parse_frontmatter, html_to_markdown, build_frontmatter_string,
+    parse_frontmatter, html_to_markdown, markdown_to_html,
+    build_frontmatter_string,
     resolve_conflict, save_mapping, generate_slug, title_from_filename,
 )
 
 
 class ProductSync(BaseSyncTool):
     """Bidirectional sync for WooCommerce products."""
+
+    def _wc_request(self, method: str, path: str, **kwargs) -> dict:
+        """Make an authenticated WooCommerce API request."""
+        url = self.wp._wc_endpoint(path)
+        params = kwargs.pop("params", {})
+        params["consumer_key"] = self.config.wc_consumer_key
+        params["consumer_secret"] = self.config.wc_consumer_secret
+
+        func = getattr(self.wp.session, method)
+        resp = func(url, params=params, timeout=30, **kwargs)
+
+        if resp.status_code >= 400:
+            raise Exception(f"WC {method.upper()} {path}: {resp.status_code} {resp.text[:500]}")
+        return resp.json()
 
     # --- Push ---
 
@@ -53,26 +92,55 @@ class ProductSync(BaseSyncTool):
             }
 
             if body.strip():
-                from .base import markdown_to_html
                 payload["description"] = markdown_to_html(body, self.config.url_prefix)
 
+            # Core fields
             if frontmatter.get("excerpt"):
                 payload["short_description"] = frontmatter["excerpt"]
+            if frontmatter.get("product_type"):
+                payload["type"] = frontmatter["product_type"]
+            if frontmatter.get("featured") is not None:
+                payload["featured"] = bool(frontmatter["featured"])
+
+            # Pricing
             if frontmatter.get("price"):
                 payload["regular_price"] = str(frontmatter["price"])
+            if frontmatter.get("sale_price"):
+                payload["sale_price"] = str(frontmatter["sale_price"])
+
+            # Inventory
             if frontmatter.get("sku"):
                 payload["sku"] = frontmatter["sku"]
             if frontmatter.get("stock_status"):
                 payload["stock_status"] = frontmatter["stock_status"]
-            if frontmatter.get("product_type"):
-                payload["type"] = frontmatter["product_type"]
+            if frontmatter.get("manage_stock") is not None:
+                payload["manage_stock"] = bool(frontmatter["manage_stock"])
+            if frontmatter.get("stock_quantity") is not None:
+                payload["stock_quantity"] = int(frontmatter["stock_quantity"])
 
-            # Categories
+            # Shipping
+            if frontmatter.get("weight"):
+                payload["weight"] = str(frontmatter["weight"])
+            if frontmatter.get("dimensions"):
+                dims = frontmatter["dimensions"]
+                if isinstance(dims, dict):
+                    payload["dimensions"] = {
+                        "length": str(dims.get("length", "")),
+                        "width": str(dims.get("width", "")),
+                        "height": str(dims.get("height", "")),
+                    }
+
+            # Categories (by name — WC resolves or creates)
             if frontmatter.get("categories"):
                 cats = frontmatter["categories"]
                 if isinstance(cats, list):
-                    # Resolve category names to IDs via WC API
                     payload["categories"] = [{"name": c} for c in cats]
+
+            # Tags (by name)
+            if frontmatter.get("tags"):
+                tags = frontmatter["tags"]
+                if isinstance(tags, list):
+                    payload["tags"] = [{"name": t} for t in tags]
 
             # Attributes
             if frontmatter.get("attributes"):
@@ -87,53 +155,15 @@ class ProductSync(BaseSyncTool):
                         for name, opts in attrs.items()
                     ]
 
-            # WooCommerce uses its own API
-            wc_url = self.wp._wc_endpoint("products")
-
             # Check if product exists by slug
-            existing_resp = self.wp.session.get(
-                wc_url,
-                params={
-                    "slug": slug,
-                    "consumer_key": self.config.wc_consumer_key,
-                    "consumer_secret": self.config.wc_consumer_secret,
-                },
-                timeout=30,
-            )
-
-            if existing_resp.status_code == 200:
-                existing_products = existing_resp.json()
-                if existing_products:
-                    product_id = existing_products[0]["id"]
-                    resp = self.wp.session.put(
-                        f"{wc_url}/{product_id}",
-                        json=payload,
-                        params={
-                            "consumer_key": self.config.wc_consumer_key,
-                            "consumer_secret": self.config.wc_consumer_secret,
-                        },
-                        timeout=30,
-                    )
-                    if resp.status_code >= 400:
-                        raise Exception(f"{resp.status_code}: {resp.text[:500]}")
-                    post = resp.json()
-                    result["status"] = "updated"
-                else:
-                    resp = self.wp.session.post(
-                        wc_url,
-                        json=payload,
-                        params={
-                            "consumer_key": self.config.wc_consumer_key,
-                            "consumer_secret": self.config.wc_consumer_secret,
-                        },
-                        timeout=30,
-                    )
-                    if resp.status_code >= 400:
-                        raise Exception(f"{resp.status_code}: {resp.text[:500]}")
-                    post = resp.json()
-                    result["status"] = "created"
+            existing = self._wc_request("get", "products", params={"slug": slug})
+            if existing:
+                product_id = existing[0]["id"]
+                post = self._wc_request("put", f"products/{product_id}", json=payload)
+                result["status"] = "updated"
             else:
-                raise Exception(f"WC API error: {existing_resp.status_code}")
+                post = self._wc_request("post", "products", json=payload)
+                result["status"] = "created"
 
             result["post_id"] = post["id"]
             result["url"] = post.get("permalink", f"{self.config.wp_site_url}/product/{slug}/")
@@ -206,20 +236,25 @@ class ProductSync(BaseSyncTool):
         return results
 
     def _build_product_frontmatter(self, product: dict) -> dict:
-        """Build frontmatter from a WooCommerce product."""
+        """Build comprehensive frontmatter from a WooCommerce product."""
         fm = {}
 
+        # --- Core ---
         fm["title"] = html_module.unescape(product.get("name", ""))
         fm["slug"] = product.get("slug", "")
         fm["status"] = product.get("status", "publish")
         fm["wp_id"] = product.get("id")
+        fm["product_type"] = product.get("type", "simple")
 
         if product.get("date_created"):
             fm["date"] = product["date_created"][:10]
         if product.get("date_modified"):
             fm["updated"] = product["date_modified"][:10]
 
-        # Short description as excerpt
+        if product.get("featured"):
+            fm["featured"] = True
+
+        # --- Short description ---
         short_desc = product.get("short_description", "")
         if short_desc:
             short_desc = re.sub(r"<[^>]+>", "", short_desc).strip()
@@ -227,20 +262,33 @@ class ProductSync(BaseSyncTool):
             if short_desc:
                 fm["excerpt"] = short_desc
 
-        # Product-specific fields
+        # --- Pricing ---
         if product.get("regular_price"):
             fm["price"] = product["regular_price"]
         elif product.get("price"):
             fm["price"] = product["price"]
+        if product.get("sale_price"):
+            fm["sale_price"] = product["sale_price"]
 
+        # --- Inventory ---
         if product.get("sku"):
             fm["sku"] = product["sku"]
-        if product.get("stock_status"):
-            fm["stock_status"] = product["stock_status"]
-        if product.get("type"):
-            fm["product_type"] = product["type"]
+        fm["stock_status"] = product.get("stock_status", "instock")
+        if product.get("manage_stock"):
+            fm["manage_stock"] = True
+            if product.get("stock_quantity") is not None:
+                fm["stock_quantity"] = product["stock_quantity"]
 
-        # Categories
+        # --- Shipping ---
+        if product.get("weight"):
+            fm["weight"] = product["weight"]
+        dims = product.get("dimensions", {})
+        if dims and any(dims.get(k) for k in ("length", "width", "height")):
+            fm["dimensions"] = {
+                k: dims[k] for k in ("length", "width", "height") if dims.get(k)
+            }
+
+        # --- Categories ---
         prod_cats = product.get("categories", [])
         if prod_cats:
             cat_names = [
@@ -250,15 +298,17 @@ class ProductSync(BaseSyncTool):
             if cat_names:
                 fm["categories"] = cat_names
 
-        # Images
-        images = product.get("images", [])
-        if images:
-            image_urls = [img.get("src", "") for img in images
-                         if isinstance(img, dict) and img.get("src")]
-            if image_urls:
-                fm["images"] = image_urls
+        # --- Tags ---
+        prod_tags = product.get("tags", [])
+        if prod_tags:
+            tag_names = [
+                html_module.unescape(t.get("name", ""))
+                for t in prod_tags if isinstance(t, dict) and t.get("name")
+            ]
+            if tag_names:
+                fm["tags"] = tag_names
 
-        # Attributes
+        # --- Attributes ---
         attributes = product.get("attributes", [])
         if attributes:
             attr_dict = {}
@@ -269,5 +319,40 @@ class ProductSync(BaseSyncTool):
                         attr_dict[attr["name"]] = options if len(options) > 1 else options[0]
             if attr_dict:
                 fm["attributes"] = attr_dict
+
+        # --- Images ---
+        images = product.get("images", [])
+        if images:
+            image_urls = [img.get("src", "") for img in images
+                         if isinstance(img, dict) and img.get("src")]
+            if image_urls:
+                fm["images"] = image_urls
+
+        # --- Variations (pull only — IDs for reference) ---
+        variations = product.get("variations", [])
+        if variations:
+            fm["variation_ids"] = variations
+
+        # --- SEO (Rank Math via meta_data) ---
+        meta_data = product.get("meta_data", [])
+        if meta_data:
+            meta_lookup = {m["key"]: m["value"] for m in meta_data
+                          if isinstance(m, dict) and m.get("key")}
+
+            # Rank Math fields
+            kw = (meta_lookup.get("rank_math_focus_keyword")
+                  or meta_lookup.get("_yoast_wpseo_focuskw") or "")
+            if kw:
+                fm["primary_keyword"] = kw
+
+            desc = (meta_lookup.get("rank_math_description")
+                    or meta_lookup.get("_yoast_wpseo_metadesc") or "")
+            if desc:
+                fm["meta_description"] = desc
+
+            seo_title = (meta_lookup.get("rank_math_title")
+                         or meta_lookup.get("_yoast_wpseo_title") or "")
+            if seo_title and seo_title != fm.get("title", ""):
+                fm["seo_title"] = seo_title
 
         return fm
