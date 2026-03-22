@@ -21,7 +21,7 @@
         }
 
         root.innerHTML =
-            '<div id="sie-chat-panel" hidden>' +
+            '<div id="sie-chat-panel" style="display:none;">' +
                 '<div id="sie-chat-header">' +
                     '<span id="sie-chat-title">' + (cfg.title || 'Ask the Knowledge Base') + '</span>' +
                     '<button id="sie-chat-close" aria-label="Close chat">&times;</button>' +
@@ -38,12 +38,14 @@
 
         document.getElementById('sie-chat-toggle').addEventListener('click', function () {
             var panel = document.getElementById('sie-chat-panel');
-            panel.hidden = !panel.hidden;
-            if (!panel.hidden) document.getElementById('sie-chat-input').focus();
+            var isOpen = panel.style.display !== 'none';
+            panel.style.display = isOpen ? 'none' : 'flex';
+            if (!isOpen) document.getElementById('sie-chat-input').focus();
         });
 
-        document.getElementById('sie-chat-close').addEventListener('click', function () {
-            document.getElementById('sie-chat-panel').hidden = true;
+        document.getElementById('sie-chat-close').addEventListener('click', function (e) {
+            e.stopPropagation();
+            document.getElementById('sie-chat-panel').style.display = 'none';
         });
 
         var agentEl = document.getElementById('sie-chat-agent');
@@ -76,7 +78,7 @@
                 'Content-Type': 'application/json',
                 'X-WP-Nonce':   cfg.nonce || '',
             },
-            body: JSON.stringify({ query: query, agent: selectedAgent }),
+            body: JSON.stringify({ query: query, agent: selectedAgent, scope: cfg.scope || '' }),
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {

@@ -59,8 +59,10 @@
     font-size: 22px;
     line-height: 1;
     cursor: pointer;
-    padding: 0;
+    padding: 4px 8px;
     opacity: 0.8;
+    position: relative;
+    z-index: 1;
 }
 #sie-chat-close:hover { opacity: 1; }
 

@@ -67,6 +67,7 @@ class SIE_Related_Content {
         add_shortcode( 'sie_insights', [ $this, 'shortcode_insights' ] );
         add_shortcode( 'sie_guides',   [ $this, 'shortcode_guides' ] );
         add_shortcode( 'sie_related',  [ $this, 'shortcode_related' ] );
+        add_shortcode( 'sie_archive',  [ $this, 'shortcode_archive' ] );
 
         // Auto-append if enabled
         add_filter( 'the_content', [ $this, 'maybe_auto_append' ], 90 );
@@ -478,8 +479,7 @@ class SIE_Related_Content {
     // =========================================================================
 
     public function enqueue_styles() {
-        if ( ! is_singular() ) return;
-
+        // Enqueue on singular pages (for [sie_related]) and any page (for [sie_archive])
         wp_enqueue_style( 'dashicons' );
         wp_add_inline_style( 'dashicons', $this->get_inline_css() );
     }
@@ -541,6 +541,288 @@ class SIE_Related_Content {
 
 /* Auto-append separator */
 .sie-related-auto { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #e5e7eb; }
+
+/* =========================== Archive page =========================== */
+.sie-archive { margin: 2rem 0; }
+
+/* Type tabs (FAQ / Insights / Guides) */
+.sie-archive__tabs {
+    display: flex; gap: 4px; margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e5e7eb; padding-bottom: 0;
+}
+.sie-archive__tab {
+    padding: 0.625rem 1.25rem; cursor: pointer; font-weight: 500;
+    border: none; background: none; font-size: 0.9375rem;
+    color: #6b7280; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+}
+.sie-archive__tab:hover { color: #111827; }
+.sie-archive__tab--active {
+    color: var(--sie-accent, #2563eb); border-bottom-color: var(--sie-accent, #2563eb); font-weight: 600;
+}
+
+/* Topic filter dropdown */
+.sie-archive__filter {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.sie-archive__filter label { font-weight: 600; font-size: 0.875rem; color: #374151; }
+.sie-archive__filter select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px;
+    font-size: 0.875rem; background: #fff; min-width: 220px;
+    appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 0.75rem center;
+}
+.sie-archive__count {
+    font-size: 0.8125rem; color: #9ca3af; margin-left: auto;
+}
+
+/* Topic group headings */
+.sie-archive__topic-heading {
+    font-size: 1.1rem; font-weight: 600; color: #111827;
+    margin: 1.75rem 0 0.75rem; padding-bottom: 0.375rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+.sie-archive__topic-heading:first-child { margin-top: 0; }
+
+/* Empty state */
+.sie-archive__empty {
+    text-align: center; padding: 3rem 1rem; color: #9ca3af; font-size: 0.9375rem;
+}
+
+/* Content panel visibility */
+.sie-archive__panel { display: none; }
+.sie-archive__panel--active { display: block; }
 CSS;
+    }
+
+    // =========================================================================
+    // Archive Page — [sie_archive]
+    // =========================================================================
+
+    /**
+     * Full archive page with type tabs and topic dropdown filter.
+     *
+     * Usage:
+     *   [sie_archive]                  — all types, topic filter
+     *   [sie_archive type="faq"]       — FAQs only
+     *   [sie_archive type="insights"]  — Insights only
+     *   [sie_archive type="guides"]    — Guides only
+     *   [sie_archive style="cards"]    — change render style
+     */
+    public function shortcode_archive( $atts ) {
+        $atts = shortcode_atts( [
+            'type'  => 'all',    // all | faq | insights | guides
+            'style' => 'accordion',
+        ], $atts, 'sie_archive' );
+
+        $cpt_map = $this->get_cpt_map();
+        $type    = sanitize_key( $atts['type'] );
+        $style   = sanitize_key( $atts['style'] );
+
+        // Determine which CPTs to show
+        $type_to_cpt = [
+            'faq'      => 'sie_faq',
+            'insights' => 'sie_insight',
+            'guides'   => 'sie_guide',
+        ];
+
+        if ( $type === 'all' ) {
+            $cpts = self::CPT_SLUGS;
+        } elseif ( isset( $type_to_cpt[ $type ] ) ) {
+            $cpts = [ $type_to_cpt[ $type ] ];
+        } else {
+            $cpts = self::CPT_SLUGS;
+        }
+
+        // Get all sie_topic terms that have posts
+        $all_topics = get_terms( [
+            'taxonomy'   => 'sie_topic',
+            'hide_empty' => true,
+            'orderby'    => 'name',
+        ] );
+        if ( is_wp_error( $all_topics ) ) $all_topics = [];
+
+        // Fetch all posts for each CPT, grouped by topic
+        $data = []; // cpt_slug => [ topic_slug => [ posts ] ]
+        $totals = []; // cpt_slug => count
+
+        foreach ( $cpts as $cpt ) {
+            $posts = get_posts( [
+                'post_type'      => $cpt,
+                'post_status'    => 'publish',
+                'posts_per_page' => -1,
+                'orderby'        => 'title',
+                'order'          => 'ASC',
+            ] );
+
+            $totals[ $cpt ] = count( $posts );
+            $grouped = [ '_general' => [] ];
+
+            foreach ( $posts as $p ) {
+                $terms = wp_get_object_terms( $p->ID, 'sie_topic', [ 'fields' => 'slugs' ] );
+                if ( empty( $terms ) || is_wp_error( $terms ) ) {
+                    $grouped['_general'][] = $p;
+                } else {
+                    foreach ( $terms as $slug ) {
+                        if ( ! isset( $grouped[ $slug ] ) ) $grouped[ $slug ] = [];
+                        $grouped[ $slug ][] = $p;
+                    }
+                }
+            }
+
+            $data[ $cpt ] = $grouped;
+        }
+
+        // Build output
+        $uid = 'sie-archive-' . wp_unique_id();
+        $show_tabs = ( $type === 'all' && count( $cpts ) > 1 );
+
+        ob_start();
+        ?>
+        <div class="sie-archive" id="<?php echo esc_attr( $uid ); ?>">
+
+            <?php if ( $show_tabs ) : ?>
+            <div class="sie-archive__tabs" role="tablist">
+                <?php foreach ( $cpts as $i => $cpt ) :
+                    $meta = $cpt_map[ $cpt ] ?? [];
+                    $label = $meta['label'] ?? $cpt;
+                    $count = $totals[ $cpt ] ?? 0;
+                ?>
+                    <button class="sie-archive__tab <?php echo $i === 0 ? 'sie-archive__tab--active' : ''; ?>"
+                            role="tab" data-panel="<?php echo esc_attr( $cpt ); ?>"
+                            aria-selected="<?php echo $i === 0 ? 'true' : 'false'; ?>">
+                        <?php echo esc_html( $label ); ?> <span style="font-weight:400;color:#9ca3af;">(<?php echo $count; ?>)</span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php foreach ( $cpts as $i => $cpt ) :
+                $meta    = $cpt_map[ $cpt ] ?? [];
+                $grouped = $data[ $cpt ] ?? [];
+                $total   = $totals[ $cpt ] ?? 0;
+                $active  = ( ! $show_tabs || $i === 0 ) ? ' sie-archive__panel--active' : '';
+
+                // Collect topics that actually have posts for this CPT
+                $cpt_topics = [];
+                foreach ( $all_topics as $t ) {
+                    if ( isset( $grouped[ $t->slug ] ) && ! empty( $grouped[ $t->slug ] ) ) {
+                        $cpt_topics[] = $t;
+                    }
+                }
+            ?>
+            <div class="sie-archive__panel<?php echo $active; ?>" data-cpt="<?php echo esc_attr( $cpt ); ?>">
+
+                <?php if ( ! empty( $cpt_topics ) || ! empty( $grouped['_general'] ) ) : ?>
+                <div class="sie-archive__filter">
+                    <label for="<?php echo esc_attr( $uid . '-filter-' . $cpt ); ?>">Filter by topic:</label>
+                    <select id="<?php echo esc_attr( $uid . '-filter-' . $cpt ); ?>" class="sie-archive__select" data-cpt="<?php echo esc_attr( $cpt ); ?>">
+                        <option value="all">All Topics</option>
+                        <?php if ( ! empty( $grouped['_general'] ) ) : ?>
+                            <option value="_general">General (<?php echo count( $grouped['_general'] ); ?>)</option>
+                        <?php endif; ?>
+                        <?php foreach ( $cpt_topics as $t ) : ?>
+                            <option value="<?php echo esc_attr( $t->slug ); ?>">
+                                <?php echo esc_html( $t->name ); ?> (<?php echo count( $grouped[ $t->slug ] ); ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <span class="sie-archive__count" data-cpt="<?php echo esc_attr( $cpt ); ?>">
+                        <?php echo $total; ?> <?php echo esc_html( strtolower( $meta['label'] ?? 'items' ) ); ?>
+                    </span>
+                </div>
+                <?php endif; ?>
+
+                <?php if ( $total === 0 ) : ?>
+                    <div class="sie-archive__empty">No <?php echo esc_html( strtolower( $meta['label'] ?? 'items' ) ); ?> yet.</div>
+                <?php else : ?>
+
+                    <?php // General (untagged) items ?>
+                    <?php if ( ! empty( $grouped['_general'] ) ) : ?>
+                        <div class="sie-archive__topic-group" data-topic="_general">
+                            <h3 class="sie-archive__topic-heading">General</h3>
+                            <?php echo $this->render_archive_items( $grouped['_general'], $style, $meta, $cpt ); ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php // Topic-grouped items ?>
+                    <?php foreach ( $cpt_topics as $t ) : ?>
+                        <div class="sie-archive__topic-group" data-topic="<?php echo esc_attr( $t->slug ); ?>">
+                            <h3 class="sie-archive__topic-heading"><?php echo esc_html( $t->name ); ?></h3>
+                            <?php echo $this->render_archive_items( $grouped[ $t->slug ], $style, $meta, $cpt ); ?>
+                        </div>
+                    <?php endforeach; ?>
+
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+
+        <script>
+        (function(){
+            var root = document.getElementById('<?php echo esc_js( $uid ); ?>');
+            if (!root) return;
+
+            // Tab switching
+            root.querySelectorAll('.sie-archive__tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    root.querySelectorAll('.sie-archive__tab').forEach(function(t) {
+                        t.classList.remove('sie-archive__tab--active');
+                        t.setAttribute('aria-selected', 'false');
+                    });
+                    root.querySelectorAll('.sie-archive__panel').forEach(function(p) {
+                        p.classList.remove('sie-archive__panel--active');
+                    });
+                    tab.classList.add('sie-archive__tab--active');
+                    tab.setAttribute('aria-selected', 'true');
+                    var panel = root.querySelector('[data-cpt="' + tab.dataset.panel + '"]');
+                    if (panel) panel.classList.add('sie-archive__panel--active');
+                });
+            });
+
+            // Topic filtering
+            root.querySelectorAll('.sie-archive__select').forEach(function(sel) {
+                sel.addEventListener('change', function() {
+                    var cpt = sel.dataset.cpt;
+                    var topic = sel.value;
+                    var panel = root.querySelector('.sie-archive__panel[data-cpt="' + cpt + '"]');
+                    if (!panel) return;
+
+                    var groups = panel.querySelectorAll('.sie-archive__topic-group');
+                    var visible = 0;
+
+                    groups.forEach(function(g) {
+                        if (topic === 'all' || g.dataset.topic === topic) {
+                            g.style.display = '';
+                            visible += g.querySelectorAll('.sie-related__item, .sie-related__card, li.sie-related__item').length
+                                || g.querySelectorAll('details, .sie-related__card, .sie-related__item').length;
+                        } else {
+                            g.style.display = 'none';
+                        }
+                    });
+
+                    // Update count
+                    var counter = root.querySelector('.sie-archive__count[data-cpt="' + cpt + '"]');
+                    if (counter) {
+                        var items = panel.querySelectorAll('.sie-archive__topic-group:not([style*="display: none"]) details, .sie-archive__topic-group:not([style*="display: none"]) .sie-related__card, .sie-archive__topic-group:not([style*="display: none"]) li.sie-related__item');
+                        counter.textContent = items.length + ' ' + counter.textContent.replace(/^\d+\s*/, '');
+                    }
+                });
+            });
+        })();
+        </script>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Render a set of archive items using the chosen style.
+     */
+    private function render_archive_items( array $posts, string $style, array $meta, string $cpt ): string {
+        $method = "render_{$style}";
+        if ( ! method_exists( $this, $method ) ) {
+            $method = 'render_accordion';
+        }
+        return $this->$method( $posts, $meta, $cpt );
     }
 }

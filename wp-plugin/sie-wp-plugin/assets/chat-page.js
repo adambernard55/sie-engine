@@ -96,7 +96,7 @@
                 'Content-Type': 'application/json',
                 'X-WP-Nonce':   cfg.nonce || '',
             },
-            body: JSON.stringify({ query: query, agent: selectedAgent }),
+            body: JSON.stringify({ query: query, agent: selectedAgent, scope: cfg.scope || '' }),
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {

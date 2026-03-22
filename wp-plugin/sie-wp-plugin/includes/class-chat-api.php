@@ -52,6 +52,12 @@ class SIE_Chat_API {
                     'sanitize_callback' => 'sanitize_key',
                     'default'           => '',
                 ],
+                'scope' => [
+                    'required'          => false,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'default'           => '',
+                ],
             ],
         ] );
     }
@@ -132,6 +138,7 @@ class SIE_Chat_API {
     public function handle_chat( WP_REST_Request $request ) {
         $query        = $request->get_param( 'query' );
         $agent_key    = $request->get_param( 'agent' );
+        $scope        = $request->get_param( 'scope' );
         $openai_key    = sie_get_option( 'sie_openai_api_key',   '' );
         $pinecone_key  = sie_get_option( 'sie_pinecone_api_key', '' );
         $pinecone_host = sie_get_option( 'sie_pinecone_host',   '' );
@@ -186,8 +193,9 @@ class SIE_Chat_API {
         $embedding = $this->get_embedding( $query, $openai_key );
         if ( is_wp_error( $embedding ) ) return $embedding;
 
-        // 2. Pinecone retrieval
-        $retrieval = $this->query_pinecone( $embedding, $pinecone_host, $pinecone_key );
+        // 2. Pinecone retrieval (scoped if specified)
+        $pinecone_filter = $this->build_pinecone_filter( $scope );
+        $retrieval = $this->query_pinecone( $embedding, $pinecone_host, $pinecone_key, $pinecone_filter );
         if ( is_wp_error( $retrieval ) ) return $retrieval;
 
         $context   = $retrieval['context'];
@@ -315,17 +323,60 @@ class SIE_Chat_API {
     // Pinecone retrieval — returns context string + structured sources
     // -------------------------------------------------------------------------
 
-    private function query_pinecone( $vector, $host, $api_key ) {
+    /**
+     * Build a Pinecone metadata filter from a scope string.
+     *
+     * Scope formats:
+     *   "faq"              → post_type = "faq"
+     *   "faq,insights"     → post_type IN ["faq", "insights"]
+     *   "topic:seo"        → tags contains "seo"
+     *   "faq+topic:seo"    → post_type = "faq" AND tags contains "seo"
+     */
+    private function build_pinecone_filter( string $scope = '' ): array {
+        if ( ! $scope ) return [];
+
+        $conditions = [];
+        $parts = array_map( 'trim', explode( '+', $scope ) );
+
+        foreach ( $parts as $part ) {
+            if ( strpos( $part, 'topic:' ) === 0 ) {
+                // Topic filter — match against tags metadata
+                $topic = substr( $part, 6 );
+                $conditions[] = [ 'tags' => [ '$in' => [ $topic ] ] ];
+            } else {
+                // Post type filter
+                $types = array_map( 'trim', explode( ',', $part ) );
+                if ( count( $types ) === 1 ) {
+                    $conditions[] = [ 'post_type' => $types[0] ];
+                } else {
+                    $conditions[] = [ 'post_type' => [ '$in' => $types ] ];
+                }
+            }
+        }
+
+        if ( empty( $conditions ) ) return [];
+        if ( count( $conditions ) === 1 ) return [ 'filter' => $conditions[0] ];
+        return [ 'filter' => [ '$and' => $conditions ] ];
+    }
+
+    private function query_pinecone( $vector, $host, $api_key, array $filter = [] ) {
+        $payload = [
+            'vector'          => $vector,
+            'topK'            => 5,
+            'includeMetadata' => true,
+        ];
+
+        // Merge scope filter if provided
+        if ( ! empty( $filter['filter'] ) ) {
+            $payload['filter'] = $filter['filter'];
+        }
+
         $res = wp_remote_post( rtrim( $host, '/' ) . '/query', [
             'headers' => [
                 'Api-Key'      => $api_key,
                 'Content-Type' => 'application/json',
             ],
-            'body'    => wp_json_encode( [
-                'vector'          => $vector,
-                'topK'            => 5,
-                'includeMetadata' => true,
-            ] ),
+            'body'    => wp_json_encode( $payload ),
             'timeout' => 15,
         ] );
 
@@ -569,13 +620,43 @@ class SIE_Chat_API {
     }
 
     /** Shortcode [sie_chat_page] — full-page search-style chat */
+    /**
+     * Full-page conversational search interface.
+     *
+     * Usage:
+     *   [sie_chat_page]                       — full KB search
+     *   [sie_chat_page scope="faq"]           — FAQs only
+     *   [sie_chat_page scope="insights"]      — Insights only
+     *   [sie_chat_page scope="faq,insights"]  — FAQs + Insights
+     *   [sie_chat_page scope="topic:seo"]     — SEO-tagged content only
+     *   [sie_chat_page scope="faq+topic:ai"]  — AI-tagged FAQs only
+     *   [sie_chat_page title="Ask about SEO" subtitle="Search our SEO knowledge base."]
+     */
     public function render_page_chat( $atts ) {
         if ( ! $this->user_can_see_widget() ) return '';
+
+        $atts = shortcode_atts( [
+            'scope'    => '',
+            'title'    => '',
+            'subtitle' => '',
+        ], $atts, 'sie_chat_page' );
 
         $this->page_chat_active = true;
 
         wp_enqueue_style( 'sie-chat-page' );
         wp_enqueue_script( 'sie-chat-page' );
+
+        // Pass scope and optional overrides to the JS config
+        $overrides = [];
+        if ( $atts['scope'] )    $overrides['scope']        = sanitize_text_field( $atts['scope'] );
+        if ( $atts['title'] )    $overrides['pageTitle']    = sanitize_text_field( $atts['title'] );
+        if ( $atts['subtitle'] ) $overrides['pageSubtitle'] = sanitize_text_field( $atts['subtitle'] );
+
+        if ( ! empty( $overrides ) ) {
+            $json = wp_json_encode( $overrides );
+            $inline = "if(window.sieChat){Object.assign(window.sieChat," . $json . ");}";
+            wp_add_inline_script( 'sie-chat-page', $inline, 'before' );
+        }
 
         return '<div id="sie-chat-page-root"></div>';
     }
