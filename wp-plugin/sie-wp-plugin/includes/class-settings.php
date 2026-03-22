@@ -46,6 +46,8 @@ class SIE_Settings {
         'sie_daily_query_limit'    => '0',
         'sie_guest_query_limit'    => '3',
         'sie_guest_limit_msg'      => 'Sign in to continue the conversation and get full access to our knowledge base.',
+        // SEO plugin
+        'sie_seo_plugin'           => 'auto',
         // GitHub sync
         'sie_github_repo'          => '',
         'sie_github_token'         => '',

@@ -869,17 +869,35 @@ def build_pull_frontmatter(post: dict, post_type: str,
         if names:
             fm["tags"] = names
 
-    # SEO (Rank Math)
+    # SEO meta — tries Rank Math, Yoast, SEOPress field names
     meta = post.get("meta", {}) or {}
-    focus_kw = meta.get("rank_math_focus_keyword", "")
+
+    # Focus keyword
+    focus_kw = (meta.get("rank_math_focus_keyword")
+                or meta.get("_yoast_wpseo_focuskw")
+                or meta.get("_seopress_analysis_target_kw")
+                or "")
     if focus_kw:
         fm["primary_keyword"] = focus_kw
-    meta_desc = meta.get("rank_math_description", "")
+
+    # Meta description
+    meta_desc = (meta.get("rank_math_description")
+                 or meta.get("_yoast_wpseo_metadesc")
+                 or meta.get("_seopress_titles_desc")
+                 or "")
     if not meta_desc:
         yoast = post.get("yoast_head_json", {}) or {}
         meta_desc = yoast.get("description", "")
     if meta_desc:
         fm["meta_description"] = meta_desc
+
+    # SEO title (if different from post title)
+    seo_title = (meta.get("rank_math_title")
+                 or meta.get("_yoast_wpseo_title")
+                 or meta.get("_seopress_titles_title")
+                 or "")
+    if seo_title and seo_title != fm.get("title", ""):
+        fm["seo_title"] = seo_title
 
     # ACF / RAG fields
     acf = post.get("acf", {}) or {}

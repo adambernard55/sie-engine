@@ -20,6 +20,7 @@ require_once SIE_PLUGIN_DIR . 'includes/class-chat-log.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-chat-api.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-settings.php';
 require_once SIE_PLUGIN_DIR . 'includes/class-permalink.php';
+require_once SIE_PLUGIN_DIR . 'includes/class-seo-meta.php';
 
 add_action( 'plugins_loaded', function () {
     ( new SIE_CPT() )->init();
@@ -28,6 +29,7 @@ add_action( 'plugins_loaded', function () {
     ( new SIE_Chat_API() )->init();
     ( new SIE_Settings() )->init();
     ( new SIE_Permalink() )->init();
+    ( new SIE_SEO_Meta() )->init();
 } );
 
 // On activation: create log table, register CPTs, flush rewrite rules.
