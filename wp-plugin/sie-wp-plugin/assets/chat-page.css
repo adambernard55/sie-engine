@@ -199,6 +199,15 @@
     color: #64748b;
 }
 
+/* ---- Disclaimer ---- */
+.sie-chat-page .sie-disclaimer {
+    text-align: center;
+    font-size: 11px;
+    color: #94a3b8;
+    margin: -8px 0 16px;
+    line-height: 1.4;
+}
+
 /* ---- Agent selector pills ---- */
 .sie-chat-page .sie-agent-selector {
     display: flex;

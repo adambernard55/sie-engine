@@ -35,6 +35,18 @@ add_action( 'plugins_loaded', function () {
     ( new SIE_Agents() )->init();
     ( new SIE_Related_Content() )->init();
     SIE_Related_Content::register_ajax();
+
+    // Flush rewrite rules on version upgrade (SFTP updates skip activation hook)
+    $stored = get_option( 'sie_db_version', '' );
+    if ( $stored !== SIE_VERSION ) {
+        add_action( 'init', function () {
+            ( new SIE_CPT() )->register_post_types();
+            ( new SIE_CPT() )->register_taxonomies();
+            flush_rewrite_rules();
+        }, 999 );
+        SIE_Chat_Log::create_table();
+        update_option( 'sie_db_version', SIE_VERSION );
+    }
 } );
 
 // On activation: create log table, register CPTs, flush rewrite rules.

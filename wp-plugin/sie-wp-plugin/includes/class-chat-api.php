@@ -240,6 +240,22 @@ class SIE_Chat_API {
             $system_prompt = $agent['prompt'];
         }
 
+        // Append integrity principles to every system prompt
+        $integrity_fragment = SIE_Settings::get_integrity_prompt();
+        if ( $integrity_fragment ) {
+            if ( $system_prompt ) {
+                $system_prompt .= $integrity_fragment;
+            } else {
+                // Will be appended to the default prompt inside ask_* methods
+                $system_prompt = get_option(
+                    'sie_system_prompt',
+                    'You are a knowledgeable assistant. Answer based only on the provided context. ' .
+                    'If the context does not contain the answer, say so clearly. ' .
+                    'Cite source URLs when referencing specific information.'
+                ) . $integrity_fragment;
+            }
+        }
+
         if ( $provider === 'openai' ) {
             $response = $this->ask_openai( $query, $context, $llm_key, $model, $temperature, $system_prompt );
         } elseif ( $provider === 'gemini' ) {
@@ -489,6 +505,7 @@ class SIE_Chat_API {
             'pageTitle'     => get_option( 'sie_page_chat_title', 'Chat with an AI Expert' ),
             'pageSubtitle'  => get_option( 'sie_page_chat_subtitle', 'Ask anything — powered by our knowledge base.' ),
             'loginUrl'      => wp_login_url( get_permalink() ),
+            'disclaimer'    => get_option( 'sie_chat_disclaimer', '' ),
             'agents'        => array_values( array_map( function ( $key, $agent ) {
                 return [
                     'key'         => $key,

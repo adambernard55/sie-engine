@@ -160,3 +160,14 @@
 }
 #sie-chat-send:hover    { background: var(--sie-primary, #2563eb); filter: brightness(0.9); }
 #sie-chat-send:disabled { background: #93c5fd; cursor: default; }
+
+/* Disclaimer */
+#sie-chat-disclaimer {
+    padding: 6px 12px;
+    font-size: 10px;
+    color: #94a3b8;
+    text-align: center;
+    line-height: 1.4;
+    border-top: 1px solid #f1f5f9;
+    flex-shrink: 0;
+}

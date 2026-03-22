@@ -39,6 +39,7 @@
                     '<input type="text" class="sie-search-input" placeholder="Ask a question\u2026" autocomplete="off" />' +
                     '<button class="sie-search-btn" aria-label="Send">' + sendArrowSVG + '</button>' +
                 '</div>' +
+                (cfg.disclaimer ? '<p class="sie-disclaimer">' + escHtml(cfg.disclaimer) + '</p>' : '') +
                 '<div class="sie-conversation"></div>' +
             '</div>';
 

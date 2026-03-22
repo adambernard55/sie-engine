@@ -32,6 +32,7 @@
                     '<input type="text" id="sie-chat-input" placeholder="Ask a question\u2026" autocomplete="off" />' +
                     '<button id="sie-chat-send">Send</button>' +
                 '</div>' +
+                (cfg.disclaimer ? '<div id="sie-chat-disclaimer">' + cfg.disclaimer.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '') +
             '</div>' +
             '<button id="sie-chat-toggle" aria-label="Open knowledge chat">&#x1F4AC;</button>';
 

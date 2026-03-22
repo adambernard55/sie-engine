@@ -43,6 +43,8 @@ class SIE_CPT {
                     ?: apply_filters( 'sie_faq_singular', 'FAQ' ),
                 'plural'   => get_option( 'sie_label_faq_plural' )
                     ?: apply_filters( 'sie_faq_plural', 'FAQs' ),
+                'slug'     => get_option( 'sie_label_faq_slug' )
+                    ?: apply_filters( 'sie_faq_slug', 'faq' ),
             ],
             'sie_insight' => [
                 'singular' => get_option( 'sie_label_insight_singular' )
@@ -57,6 +59,8 @@ class SIE_CPT {
                     ?: apply_filters( 'sie_guide_singular', 'Guide' ),
                 'plural'   => get_option( 'sie_label_guide_plural' )
                     ?: apply_filters( 'sie_guide_plural', 'Guides' ),
+                'slug'     => get_option( 'sie_label_guide_slug' )
+                    ?: apply_filters( 'sie_guide_slug', 'guides' ),
             ],
         ];
     }
@@ -70,12 +74,13 @@ class SIE_CPT {
         $triad = self::triad_labels();
 
         // Knowledge Base — primary CPT for synced KB articles
+        $kb_slug = get_option( 'sie_kb_slug' ) ?: 'kb';
         register_post_type( 'knowledge_base', [
             'labels' => self::labels( 'Knowledge Base', 'Knowledge Base' ),
             'public'              => true,
             'publicly_queryable'  => true,
-            'has_archive'         => 'kb',
-            'rewrite'             => [ 'slug' => 'kb/%knowledge_topic%', 'with_front' => false ],
+            'has_archive'         => $kb_slug,
+            'rewrite'             => [ 'slug' => $kb_slug . '/%knowledge_topic%', 'with_front' => false ],
             'menu_icon'           => 'dashicons-book-alt',
             'menu_position'       => 24,
             'supports'            => [ 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions' ],
@@ -90,7 +95,7 @@ class SIE_CPT {
             'labels' => self::labels( $triad['sie_faq']['singular'], $triad['sie_faq']['plural'] ),
             'public'              => true,
             'has_archive'         => true,
-            'rewrite'             => [ 'slug' => 'faq', 'with_front' => false ],
+            'rewrite'             => [ 'slug' => $triad['sie_faq']['slug'], 'with_front' => false ],
             'menu_icon'           => 'dashicons-editor-help',
             'menu_position'       => 25,
             'supports'            => [ 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions' ],
@@ -119,7 +124,7 @@ class SIE_CPT {
             'labels' => self::labels( $triad['sie_guide']['singular'], $triad['sie_guide']['plural'] ),
             'public'              => true,
             'has_archive'         => true,
-            'rewrite'             => [ 'slug' => 'guides', 'with_front' => false ],
+            'rewrite'             => [ 'slug' => $triad['sie_guide']['slug'], 'with_front' => false ],
             'menu_icon'           => 'dashicons-compass',
             'menu_position'       => 27,
             'supports'            => [ 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions' ],

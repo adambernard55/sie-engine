@@ -12,7 +12,14 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 class SIE_Permalink {
 
+    private function kb_slug(): string {
+        return get_option( 'sie_kb_slug' ) ?: 'kb';
+    }
+
     public function init() {
+        // Add link on WordPress Permalinks settings page
+        add_action( 'admin_init', [ $this, 'add_permalink_notice' ] );
+
         // Try to catch the CPT registration event (may already have fired).
         add_action( 'registered_post_type_knowledge_base', [ $this, 'override_rewrite' ], 10, 2 );
 
@@ -25,19 +32,38 @@ class SIE_Permalink {
     }
 
     /**
+     * Add a section to the WordPress Permalinks page linking to SIE settings.
+     */
+    public function add_permalink_notice() {
+        add_settings_section(
+            'sie_permalink_section',
+            'SIE Permalinks',
+            function () {
+                $url = admin_url( 'admin.php?page=sie-settings&tab=content' );
+                printf(
+                    '<p>Knowledge Base, FAQ, Insight, and Guide URL slugs are managed in <a href="%s"><strong>SIE &rarr; Content &rarr; Permalinks</strong></a>.</p>',
+                    esc_url( $url )
+                );
+            },
+            'permalink'
+        );
+    }
+
+    /**
      * Override the CPT rewrite slug after CPT UI registers it.
      */
     public function override_rewrite( $post_type, $args ) {
         global $wp_rewrite;
 
+        $slug = $this->kb_slug();
         $args->rewrite = [
-            'slug'       => 'kb/%knowledge_topic%',
+            'slug'       => $slug . '/%knowledge_topic%',
             'with_front' => false,
         ];
 
         // Re-add the permastruct with the new slug.
         $wp_rewrite->extra_permastructs['knowledge_base'] = [
-            'struct'   => '/kb/%knowledge_topic%/%knowledge_base%',
+            'struct'   => '/' . $slug . '/%knowledge_topic%/%knowledge_base%',
             'ep_mask'  => EP_NONE,
             'paged'    => false,
             'feed'     => false,
@@ -62,8 +88,9 @@ class SIE_Permalink {
             return; // Already set by override_rewrite().
         }
 
+        $slug = $this->kb_slug();
         $wp_rewrite->extra_permastructs['knowledge_base'] = [
-            'struct'    => '/kb/%knowledge_topic%/%knowledge_base%',
+            'struct'    => '/' . $slug . '/%knowledge_topic%/%knowledge_base%',
             'ep_mask'   => EP_NONE,
             'paged'     => false,
             'feed'      => false,
@@ -79,16 +106,18 @@ class SIE_Permalink {
      * resolves it to a knowledge_base post by slug (the last segment).
      */
     public function add_rewrite_rules() {
+        $slug = $this->kb_slug();
+
         // Match /kb/anything/post-slug/ — the post slug is the last segment.
         add_rewrite_rule(
-            '^kb/(.+)/([^/]+)/?$',
+            '^' . preg_quote( $slug, '/' ) . '/(.+)/([^/]+)/?$',
             'index.php?knowledge_base=$matches[2]',
             'top'
         );
 
         // Keep the flat /kb/post-slug/ rule as fallback.
         add_rewrite_rule(
-            '^kb/([^/]+)/?$',
+            '^' . preg_quote( $slug, '/' ) . '/([^/]+)/?$',
             'index.php?knowledge_base=$matches[1]',
             'top'
         );
