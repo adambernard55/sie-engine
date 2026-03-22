@@ -46,6 +46,10 @@ class SIE_Settings {
         'sie_daily_query_limit'    => '0',
         'sie_guest_query_limit'    => '3',
         'sie_guest_limit_msg'      => 'Sign in to continue the conversation and get full access to our knowledge base.',
+        // GitHub sync
+        'sie_github_repo'          => '',
+        'sie_github_token'         => '',
+        'sie_sync_workflow'        => 'kb-sync.yml',
     ];
 
     const TABS = [
@@ -56,8 +60,9 @@ class SIE_Settings {
     ];
 
     public function init() {
-        add_action( 'admin_menu', [ $this, 'add_menu' ] );
-        add_action( 'admin_init', [ $this, 'register_settings' ] );
+        add_action( 'admin_menu',    [ $this, 'add_menu' ] );
+        add_action( 'admin_init',    [ $this, 'register_settings' ] );
+        add_action( 'wp_ajax_sie_dispatch_sync', [ $this, 'ajax_dispatch_sync' ] );
     }
 
     public function add_menu() {
@@ -454,7 +459,7 @@ class SIE_Settings {
     private function tab_documents() {
         ?>
         <h2>Connected Post Types</h2>
-        <p>Select post types to connect to the SIE ecosystem. Connected types get the <strong>SIE Topics</strong> taxonomy attached and become eligible for chat indexing via Pinecone. SIE's own types (Knowledge Base, FAQ, Insight, Guide) are always included.</p>
+        <p>Select post types to connect to the SIE ecosystem. Connected types get the <strong>SIE Topics</strong> taxonomy attached and become eligible for chat indexing via Pinecone.</p>
         <table class="form-table" role="presentation">
             <tr>
                 <th>Post Types</th>
@@ -484,35 +489,253 @@ class SIE_Settings {
         </table>
 
         <h2>Topic Mapping</h2>
-        <table class="form-table" role="presentation">
-            <tr>
-                <th>Knowledge Topics</th>
-                <td>
-                    <p>Configure path patterns for automatic topic assignment during sync.</p>
-                    <p><a href="<?php echo esc_url( admin_url( 'edit-tags.php?taxonomy=knowledge_topic&post_type=knowledge_base' ) ); ?>"
-                          class="button">Manage Knowledge Topics</a></p>
-                    <p class="description" style="margin-top:8px;">
-                        Edit each term to set its <strong>KB Path Pattern</strong> (e.g. <code>/AI/0_fundamentals/</code>).
-                        The sync pipeline uses these patterns to auto-assign topics to imported articles.
-                    </p>
-                </td>
-            </tr>
+        <p>Folder paths in the knowledge base are mapped to WordPress taxonomy terms. The sync pipeline uses these to auto-assign topics.</p>
+
+        <?php
+        // Show current mappings inline
+        $terms = get_terms( [ 'taxonomy' => 'knowledge_topic', 'hide_empty' => false ] );
+        if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) :
+        ?>
+        <table class="widefat striped" style="max-width:700px;">
+            <thead>
+                <tr>
+                    <th>Topic</th>
+                    <th>Path Pattern</th>
+                    <th>Term ID</th>
+                    <th>Posts</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ( $terms as $term ) :
+                $pattern = get_term_meta( $term->term_id, '_sie_path_pattern', true );
+            ?>
+                <tr>
+                    <td>
+                        <a href="<?php echo esc_url( admin_url( 'term.php?taxonomy=knowledge_topic&tag_ID=' . $term->term_id . '&post_type=knowledge_base' ) ); ?>">
+                            <?php
+                            // Indent children
+                            if ( $term->parent ) {
+                                $depth = 0;
+                                $p = $term->parent;
+                                while ( $p ) {
+                                    $depth++;
+                                    $parent_term = get_term( $p, 'knowledge_topic' );
+                                    $p = $parent_term && ! is_wp_error( $parent_term ) ? $parent_term->parent : 0;
+                                }
+                                echo str_repeat( '&mdash; ', $depth );
+                            }
+                            echo esc_html( $term->name );
+                            ?>
+                        </a>
+                    </td>
+                    <td><code><?php echo $pattern ? esc_html( $pattern ) : '<span style="color:#94a3b8;">not set</span>'; ?></code></td>
+                    <td><?php echo intval( $term->term_id ); ?></td>
+                    <td><?php echo intval( $term->count ); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p style="margin-top:10px;">
+            <a href="<?php echo esc_url( admin_url( 'edit-tags.php?taxonomy=knowledge_topic&post_type=knowledge_base' ) ); ?>"
+               class="button">Edit Knowledge Topics</a>
+        </p>
+        <?php else : ?>
+        <p class="description">No knowledge topics found.
+            <a href="<?php echo esc_url( admin_url( 'edit-tags.php?taxonomy=knowledge_topic&post_type=knowledge_base' ) ); ?>">Create topics</a>
+        </p>
+        <?php endif; ?>
+
+        <table class="form-table" role="presentation" style="margin-top:10px;">
             <tr>
                 <th>SIE Topics</th>
                 <td>
-                    <p>Shared taxonomy across FAQ, Insight, Guide, and connected post types.</p>
-                    <p><a href="<?php echo esc_url( admin_url( 'edit-tags.php?taxonomy=sie_topic' ) ); ?>"
-                          class="button">Manage SIE Topics</a></p>
+                    <a href="<?php echo esc_url( admin_url( 'edit-tags.php?taxonomy=sie_topic' ) ); ?>"
+                       class="button">Manage SIE Topics</a>
+                    <p class="description" style="margin-top:4px;">Shared taxonomy across FAQ, Insight, Guide, and connected post types.</p>
                 </td>
             </tr>
             <tr>
-                <th>Topic API Endpoint</th>
+                <th>Topic API</th>
                 <td>
                     <code><?php echo esc_url( rest_url( 'sie/v1/topics' ) ); ?></code>
-                    <p class="description">Used by kb_sync.py for dynamic topic mapping during automated sync.</p>
+                    <p class="description">Used by kb_sync.py for dynamic topic mapping.</p>
                 </td>
             </tr>
         </table>
+
+        <h2>Sync Configuration</h2>
+        <p>Connect to your GitHub repository to trigger sync runs from this dashboard.</p>
+        <table class="form-table" role="presentation">
+            <tr>
+                <th><label for="sie_github_repo">GitHub Repository</label></th>
+                <td><input type="text" name="sie_github_repo" id="sie_github_repo"
+                           value="<?php echo esc_attr( get_option( 'sie_github_repo' ) ); ?>"
+                           class="regular-text" placeholder="owner/repo-name" />
+                    <p class="description">The instance repo (e.g. <code>adambernard55/sie-adambernard</code>), not the engine repo.</p></td>
+            </tr>
+            <tr>
+                <th><label for="sie_github_token">GitHub Token</label></th>
+                <td><input type="password" name="sie_github_token" id="sie_github_token"
+                           value="<?php echo esc_attr( get_option( 'sie_github_token' ) ); ?>"
+                           class="regular-text" autocomplete="off" />
+                    <p class="description">Personal access token with <code>repo</code> and <code>workflow</code> scopes. Used to dispatch sync workflows.</p></td>
+            </tr>
+            <tr>
+                <th><label for="sie_sync_workflow">Workflow File</label></th>
+                <td><input type="text" name="sie_sync_workflow" id="sie_sync_workflow"
+                           value="<?php echo esc_attr( get_option( 'sie_sync_workflow', 'kb-sync.yml' ) ); ?>"
+                           class="regular-text" />
+                    <p class="description">GitHub Actions workflow filename to dispatch.</p></td>
+            </tr>
+        </table>
+
+        <h2>Run Sync</h2>
         <?php
+        $repo = get_option( 'sie_github_repo' );
+        $token = get_option( 'sie_github_token' );
+        if ( $repo && $token ) :
+        ?>
+        <table class="form-table" role="presentation">
+            <tr>
+                <th>Filter path</th>
+                <td>
+                    <input type="text" id="sie_sync_filter" placeholder="e.g. AI/ or GROWTH/" class="regular-text" />
+                    <p class="description">Optional. Only sync files under this folder prefix. Leave empty for all.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Batch size</th>
+                <td>
+                    <input type="number" id="sie_sync_batch" value="50" class="small-text" min="0" />
+                    <p class="description">Max files per run. 0 = unlimited.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Offset</th>
+                <td>
+                    <input type="number" id="sie_sync_offset" value="0" class="small-text" min="0" />
+                    <p class="description">Skip this many files (for paginated sync runs).</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Dry run</th>
+                <td>
+                    <label>
+                        <input type="checkbox" id="sie_sync_dry_run" />
+                        Preview changes without syncing
+                    </label>
+                </td>
+            </tr>
+            <tr>
+                <th></th>
+                <td>
+                    <button type="button" id="sie_dispatch_sync" class="button button-primary">Dispatch Sync</button>
+                    <span id="sie_sync_status" style="margin-left:12px;"></span>
+                </td>
+            </tr>
+        </table>
+
+        <script>
+        document.getElementById('sie_dispatch_sync').addEventListener('click', function () {
+            var btn    = this;
+            var status = document.getElementById('sie_sync_status');
+            btn.disabled = true;
+            status.textContent = 'Dispatching...';
+            status.style.color = '#64748b';
+
+            var data = new FormData();
+            data.append('action', 'sie_dispatch_sync');
+            data.append('_wpnonce', '<?php echo wp_create_nonce( 'sie_dispatch_sync' ); ?>');
+            data.append('filter', document.getElementById('sie_sync_filter').value);
+            data.append('batch_size', document.getElementById('sie_sync_batch').value);
+            data.append('offset', document.getElementById('sie_sync_offset').value);
+            data.append('dry_run', document.getElementById('sie_sync_dry_run').checked ? '1' : '0');
+
+            fetch(ajaxurl, { method: 'POST', body: data })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    btn.disabled = false;
+                    if (res.success) {
+                        status.textContent = 'Sync dispatched successfully!';
+                        status.style.color = '#16a34a';
+                    } else {
+                        status.textContent = 'Error: ' + (res.data || 'Unknown error');
+                        status.style.color = '#dc2626';
+                    }
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    status.textContent = 'Network error — check connection.';
+                    status.style.color = '#dc2626';
+                });
+        });
+        </script>
+        <?php else : ?>
+        <p class="description">Configure the GitHub repository and token above to enable sync dispatch from this dashboard.</p>
+        <?php endif; ?>
+        <?php
+    }
+
+    // =========================================================================
+    // AJAX: Dispatch GitHub Actions workflow
+    // =========================================================================
+
+    public function ajax_dispatch_sync() {
+        check_ajax_referer( 'sie_dispatch_sync' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Unauthorized.' );
+        }
+
+        $repo     = get_option( 'sie_github_repo' );
+        $token    = get_option( 'sie_github_token' );
+        $workflow = get_option( 'sie_sync_workflow', 'kb-sync.yml' );
+
+        if ( ! $repo || ! $token ) {
+            wp_send_json_error( 'GitHub repo or token not configured.' );
+        }
+
+        $inputs = [];
+        $filter = sanitize_text_field( $_POST['filter'] ?? '' );
+        $batch  = absint( $_POST['batch_size'] ?? 50 );
+        $offset = absint( $_POST['offset'] ?? 0 );
+        $dry    = ( $_POST['dry_run'] ?? '0' ) === '1';
+
+        if ( $filter ) $inputs['filter']     = $filter;
+        if ( $batch )  $inputs['batch_size']  = (string) $batch;
+        if ( $offset ) $inputs['offset']      = (string) $offset;
+        if ( $dry )    $inputs['dry_run']     = 'true';
+
+        $url = sprintf(
+            'https://api.github.com/repos/%s/actions/workflows/%s/dispatches',
+            sanitize_text_field( $repo ),
+            sanitize_text_field( $workflow )
+        );
+
+        $response = wp_remote_post( $url, [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Accept'        => 'application/vnd.github+json',
+                'Content-Type'  => 'application/json',
+            ],
+            'body'    => wp_json_encode( [
+                'ref'    => 'main',
+                'inputs' => $inputs,
+            ] ),
+            'timeout' => 15,
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( $response->get_error_message() );
+        }
+
+        $code = wp_remote_retrieve_response_code( $response );
+
+        if ( $code === 204 ) {
+            wp_send_json_success( 'Workflow dispatched.' );
+        } else {
+            $body = json_decode( wp_remote_retrieve_body( $response ), true );
+            wp_send_json_error( $body['message'] ?? "GitHub returned HTTP {$code}." );
+        }
     }
 }
