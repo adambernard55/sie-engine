@@ -64,6 +64,27 @@
 }
 #sie-chat-close:hover { opacity: 1; }
 
+/* Agent selector row */
+#sie-chat-agent-row {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+#sie-chat-agent {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    background: #fff;
+    color: #334155;
+}
+#sie-chat-agent:focus {
+    border-color: var(--sie-primary, #2563eb);
+}
+
 /* Messages */
 #sie-chat-messages {
     flex: 1;

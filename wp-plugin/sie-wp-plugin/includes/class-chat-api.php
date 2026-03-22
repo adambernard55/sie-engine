@@ -46,6 +46,12 @@ class SIE_Chat_API {
                     'type'              => 'string',
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
+                'agent' => [
+                    'required'          => false,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_key',
+                    'default'           => '',
+                ],
             ],
         ] );
     }
@@ -125,6 +131,7 @@ class SIE_Chat_API {
 
     public function handle_chat( WP_REST_Request $request ) {
         $query        = $request->get_param( 'query' );
+        $agent_key    = $request->get_param( 'agent' );
         $openai_key   = get_option( 'sie_openai_api_key',   '' );
         $pinecone_key = get_option( 'sie_pinecone_api_key', '' );
         $pinecone_host = get_option( 'sie_pinecone_host',   '' );
@@ -133,19 +140,42 @@ class SIE_Chat_API {
             return new WP_Error( 'sie_not_configured', 'SIE is not fully configured.', [ 'status' => 503 ] );
         }
 
-        // Provider + model
+        // Resolve agent config (if selected)
+        $agent = null;
+        if ( $agent_key ) {
+            $agent = SIE_Agents::get_agent( $agent_key );
+        }
+
+        // Provider + model — agent can override
         $provider = get_option( 'sie_llm_provider', 'openai' );
+
+        // Agent model override: "openai:gpt-4o", "anthropic:claude-sonnet-4-5-20250514", "gemini:gemini-2.5-flash"
+        if ( $agent && ! empty( $agent['model'] ) ) {
+            $parts = explode( ':', $agent['model'], 2 );
+            if ( count( $parts ) === 2 ) {
+                $provider = $parts[0];
+                $model    = $parts[1];
+            }
+        }
+
+        if ( ! isset( $model ) ) {
+            if ( $provider === 'openai' ) {
+                $model = get_option( 'sie_openai_model', 'gpt-4o-mini' );
+            } elseif ( $provider === 'gemini' ) {
+                $model = get_option( 'sie_gemini_model', 'gemini-2.5-flash' );
+            } else {
+                $model = get_option( 'sie_anthropic_model', 'claude-sonnet-4-5-20250514' );
+            }
+        }
+
         if ( $provider === 'openai' ) {
-            $model   = get_option( 'sie_openai_model', 'gpt-4o-mini' );
             $llm_key = $openai_key;
         } elseif ( $provider === 'gemini' ) {
-            $model   = get_option( 'sie_gemini_model', 'gemini-2.5-flash' );
             $llm_key = get_option( 'sie_gemini_api_key', '' );
             if ( ! $llm_key ) {
                 return new WP_Error( 'sie_not_configured', 'Gemini API key is not configured.', [ 'status' => 503 ] );
             }
         } else {
-            $model   = get_option( 'sie_anthropic_model', 'claude-sonnet-4-5-20250514' );
             $llm_key = get_option( 'sie_anthropic_api_key', '' );
             if ( ! $llm_key ) {
                 return new WP_Error( 'sie_not_configured', 'Anthropic API key is not configured.', [ 'status' => 503 ] );
@@ -199,15 +229,23 @@ class SIE_Chat_API {
             ] );
         }
 
-        // 4. Ask LLM
+        // 4. Ask LLM — agent can override temperature and system prompt
         $temperature = floatval( get_option( 'sie_temperature', '0.2' ) );
+        if ( $agent && $agent['temperature'] !== '' ) {
+            $temperature = floatval( $agent['temperature'] );
+        }
+
+        $system_prompt = null;
+        if ( $agent && ! empty( $agent['prompt'] ) ) {
+            $system_prompt = $agent['prompt'];
+        }
 
         if ( $provider === 'openai' ) {
-            $response = $this->ask_openai( $query, $context, $llm_key, $model, $temperature );
+            $response = $this->ask_openai( $query, $context, $llm_key, $model, $temperature, $system_prompt );
         } elseif ( $provider === 'gemini' ) {
-            $response = $this->ask_gemini( $query, $context, $llm_key, $model, $temperature );
+            $response = $this->ask_gemini( $query, $context, $llm_key, $model, $temperature, $system_prompt );
         } else {
-            $response = $this->ask_anthropic( $query, $context, $llm_key, $model, $temperature );
+            $response = $this->ask_anthropic( $query, $context, $llm_key, $model, $temperature, $system_prompt );
         }
 
         if ( is_wp_error( $response ) ) return $response;
@@ -313,8 +351,8 @@ class SIE_Chat_API {
     // OpenAI completion
     // -------------------------------------------------------------------------
 
-    private function ask_openai( $query, $context, $api_key, $model, $temperature ) {
-        $system = get_option(
+    private function ask_openai( $query, $context, $api_key, $model, $temperature, $system_prompt = null ) {
+        $system = $system_prompt ?? get_option(
             'sie_system_prompt',
             'You are a knowledgeable assistant. Answer based only on the provided context. ' .
             'If the context does not contain the answer, say so clearly. ' .
@@ -350,8 +388,8 @@ class SIE_Chat_API {
     // Anthropic completion
     // -------------------------------------------------------------------------
 
-    private function ask_anthropic( $query, $context, $api_key, $model, $temperature ) {
-        $system = get_option(
+    private function ask_anthropic( $query, $context, $api_key, $model, $temperature, $system_prompt = null ) {
+        $system = $system_prompt ?? get_option(
             'sie_system_prompt',
             'You are a knowledgeable assistant. Answer based only on the provided context. ' .
             'If the context does not contain the answer, say so clearly. ' .
@@ -388,8 +426,8 @@ class SIE_Chat_API {
     // Gemini completion
     // -------------------------------------------------------------------------
 
-    private function ask_gemini( $query, $context, $api_key, $model, $temperature ) {
-        $system = get_option(
+    private function ask_gemini( $query, $context, $api_key, $model, $temperature, $system_prompt = null ) {
+        $system = $system_prompt ?? get_option(
             'sie_system_prompt',
             'You are a knowledgeable assistant. Answer based only on the provided context. ' .
             'If the context does not contain the answer, say so clearly. ' .
@@ -451,6 +489,14 @@ class SIE_Chat_API {
             'pageTitle'     => get_option( 'sie_page_chat_title', 'Chat with an AI Expert' ),
             'pageSubtitle'  => get_option( 'sie_page_chat_subtitle', 'Ask anything — powered by our knowledge base.' ),
             'loginUrl'      => wp_login_url( get_permalink() ),
+            'agents'        => array_values( array_map( function ( $key, $agent ) {
+                return [
+                    'key'         => $key,
+                    'name'        => $agent['name'],
+                    'icon'        => $agent['icon'],
+                    'description' => $agent['description'],
+                ];
+            }, array_keys( SIE_Agents::get_active_agents() ), SIE_Agents::get_active_agents() ) ),
         ];
 
         // Always register both — only enqueue widget if page chat isn't active

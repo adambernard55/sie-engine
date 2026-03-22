@@ -48,6 +48,16 @@ class SIE_Settings {
         'sie_guest_limit_msg'      => 'Sign in to continue the conversation and get full access to our knowledge base.',
         // SEO plugin
         'sie_seo_plugin'           => 'auto',
+        // Triad labels (editable per site)
+        'sie_label_faq_singular'     => '',
+        'sie_label_faq_plural'       => '',
+        'sie_label_insight_singular' => '',
+        'sie_label_insight_plural'   => '',
+        'sie_label_insight_slug'     => '',
+        'sie_label_guide_singular'   => '',
+        'sie_label_guide_plural'     => '',
+        // Related content
+        'sie_auto_related'           => '0',
         // GitHub sync
         'sie_github_repo'          => '',
         'sie_github_token'         => '',
@@ -57,6 +67,8 @@ class SIE_Settings {
     const TABS = [
         'general'   => 'General',
         'models'    => 'Models',
+        'agents'    => 'Agents',
+        'content'   => 'Content',
         'guardrails'=> 'Guardrails',
         'documents' => 'Documents',
     ];
@@ -120,6 +132,8 @@ class SIE_Settings {
                 switch ( $active ) {
                     case 'general':   $this->tab_general();   break;
                     case 'models':    $this->tab_models();    break;
+                    case 'agents':    $this->tab_agents();    break;
+                    case 'content':   $this->tab_content();   break;
                     case 'guardrails':$this->tab_guardrails();break;
                     case 'documents': $this->tab_documents(); break;
                 }
@@ -371,6 +385,190 @@ class SIE_Settings {
             document.getElementById('sie_temp_value').textContent = this.value;
         });
         </script>
+        <?php
+    }
+
+    // =========================================================================
+    // Tab: Content (Triad Labels + Related Content)
+    // =========================================================================
+
+    private function tab_content() {
+        $triad = SIE_CPT::triad_labels();
+        ?>
+        <h2>Knowledge Triad Labels</h2>
+        <p class="description">Customize the names of the three content types. Changes apply to admin menus, shortcode headings, and the REST API. Leave blank to use defaults (or filter overrides).</p>
+        <table class="form-table" role="presentation">
+            <tr>
+                <th>FAQ Labels</th>
+                <td>
+                    <input type="text" name="sie_label_faq_singular"
+                           value="<?php echo esc_attr( get_option( 'sie_label_faq_singular' ) ); ?>"
+                           class="regular-text" placeholder="FAQ" />
+                    <input type="text" name="sie_label_faq_plural"
+                           value="<?php echo esc_attr( get_option( 'sie_label_faq_plural' ) ); ?>"
+                           class="regular-text" placeholder="FAQs" />
+                    <p class="description">Singular / Plural</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Insight Labels</th>
+                <td>
+                    <input type="text" name="sie_label_insight_singular"
+                           value="<?php echo esc_attr( get_option( 'sie_label_insight_singular' ) ); ?>"
+                           class="regular-text" placeholder="Insight" />
+                    <input type="text" name="sie_label_insight_plural"
+                           value="<?php echo esc_attr( get_option( 'sie_label_insight_plural' ) ); ?>"
+                           class="regular-text" placeholder="Insights" />
+                    <input type="text" name="sie_label_insight_slug"
+                           value="<?php echo esc_attr( get_option( 'sie_label_insight_slug' ) ); ?>"
+                           class="regular-text" placeholder="insights" />
+                    <p class="description">Singular / Plural / URL Slug (e.g., "Pro Tip" / "Pro Tips" / "pro-tips" for another site). Flush permalinks after changing the slug.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Guide Labels</th>
+                <td>
+                    <input type="text" name="sie_label_guide_singular"
+                           value="<?php echo esc_attr( get_option( 'sie_label_guide_singular' ) ); ?>"
+                           class="regular-text" placeholder="Guide" />
+                    <input type="text" name="sie_label_guide_plural"
+                           value="<?php echo esc_attr( get_option( 'sie_label_guide_plural' ) ); ?>"
+                           class="regular-text" placeholder="Guides" />
+                    <p class="description">Singular / Plural</p>
+                </td>
+            </tr>
+        </table>
+
+        <h2>Related Content</h2>
+        <table class="form-table" role="presentation">
+            <tr>
+                <th>Auto-Append</th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="sie_auto_related" value="1"
+                               <?php checked( get_option( 'sie_auto_related', '0' ), '1' ); ?> />
+                        Automatically display related FAQs, Insights &amp; Guides after post content
+                    </label>
+                    <p class="description">Applies to Knowledge Base articles, Posts, Pages, and Products. Skipped if a shortcode is already present.</p>
+                </td>
+            </tr>
+        </table>
+
+        <h2>Shortcode Reference</h2>
+        <table class="widefat striped" style="max-width:700px;">
+            <thead>
+                <tr><th>Shortcode</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>[sie_related]</code></td><td>All related FAQs, Insights &amp; Guides for the current post</td></tr>
+                <tr><td><code>[sie_faqs]</code></td><td>Related FAQs only</td></tr>
+                <tr><td><code>[sie_insights]</code></td><td>Related Insights only</td></tr>
+                <tr><td><code>[sie_guides]</code></td><td>Related Guides only</td></tr>
+            </tbody>
+        </table>
+        <p class="description" style="margin-top:8px;">
+            Attributes: <code>style="accordion|list|cards"</code> &nbsp; <code>limit="5"</code> &nbsp; <code>post_id="123"</code>
+        </p>
+        <?php
+    }
+
+    // =========================================================================
+    // Tab: Agents
+    // =========================================================================
+
+    private function tab_agents() {
+        // Handle save
+        if ( isset( $_POST['sie_agents_save'] ) && check_admin_referer( 'sie_agents_save' ) ) {
+            $agents = [];
+            $keys   = $_POST['agent_key'] ?? [];
+            foreach ( $keys as $i => $key ) {
+                $key = sanitize_key( $key );
+                if ( ! $key ) continue;
+                $agents[ $key ] = [
+                    'name'        => sanitize_text_field( $_POST['agent_name'][ $i ] ?? '' ),
+                    'icon'        => sanitize_text_field( $_POST['agent_icon'][ $i ] ?? 'dashicons-admin-generic' ),
+                    'description' => sanitize_text_field( $_POST['agent_desc'][ $i ] ?? '' ),
+                    'prompt'      => sanitize_textarea_field( $_POST['agent_prompt'][ $i ] ?? '' ),
+                    'model'       => sanitize_text_field( $_POST['agent_model'][ $i ] ?? '' ),
+                    'temperature' => sanitize_text_field( $_POST['agent_temp'][ $i ] ?? '' ),
+                    'active'      => isset( $_POST['agent_active'][ $i ] ),
+                ];
+            }
+            SIE_Agents::save_agents( $agents );
+            echo '<div class="notice notice-success is-dismissible"><p>Agents saved.</p></div>';
+        }
+
+        $agents = SIE_Agents::get_agents();
+        ?>
+        <p>Agents are AI personas with specialized system prompts. Users can switch agents in the chat to get different styles of response — all powered by the same knowledge base.</p>
+
+        <form method="post">
+            <?php wp_nonce_field( 'sie_agents_save' ); ?>
+            <input type="hidden" name="sie_agents_save" value="1" />
+
+            <div id="sie-agents-list">
+            <?php $idx = 0; foreach ( $agents as $key => $agent ) : ?>
+                <div class="sie-agent-card" style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:16px;margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <h3 style="margin:0;">
+                            <span class="dashicons <?php echo esc_attr( $agent['icon'] ); ?>" style="margin-right:6px;color:#2563eb;"></span>
+                            <?php echo esc_html( $agent['name'] ); ?>
+                            <?php if ( ! empty( $agent['builtin'] ) ) : ?>
+                                <span style="font-size:11px;color:#94a3b8;font-weight:normal;margin-left:8px;">built-in</span>
+                            <?php endif; ?>
+                        </h3>
+                        <label>
+                            <input type="checkbox" name="agent_active[<?php echo $idx; ?>]" value="1"
+                                   <?php checked( ! empty( $agent['active'] ) ); ?> />
+                            Active
+                        </label>
+                    </div>
+
+                    <input type="hidden" name="agent_key[<?php echo $idx; ?>]" value="<?php echo esc_attr( $key ); ?>" />
+
+                    <table class="form-table" style="margin:0;" role="presentation">
+                        <tr>
+                            <th style="width:120px;"><label>Name</label></th>
+                            <td><input type="text" name="agent_name[<?php echo $idx; ?>]"
+                                       value="<?php echo esc_attr( $agent['name'] ); ?>" class="regular-text" /></td>
+                        </tr>
+                        <tr>
+                            <th><label>Icon</label></th>
+                            <td><input type="text" name="agent_icon[<?php echo $idx; ?>]"
+                                       value="<?php echo esc_attr( $agent['icon'] ); ?>" class="regular-text" />
+                                <p class="description">Dashicons class, e.g. <code>dashicons-search</code>. <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank">Browse icons</a></p></td>
+                        </tr>
+                        <tr>
+                            <th><label>Description</label></th>
+                            <td><input type="text" name="agent_desc[<?php echo $idx; ?>]"
+                                       value="<?php echo esc_attr( $agent['description'] ); ?>" class="large-text" /></td>
+                        </tr>
+                        <tr>
+                            <th><label>System Prompt</label></th>
+                            <td><textarea name="agent_prompt[<?php echo $idx; ?>]"
+                                          rows="5" class="large-text"><?php echo esc_textarea( $agent['prompt'] ); ?></textarea></td>
+                        </tr>
+                        <tr>
+                            <th><label>Model Override</label></th>
+                            <td><input type="text" name="agent_model[<?php echo $idx; ?>]"
+                                       value="<?php echo esc_attr( $agent['model'] ?? '' ); ?>" class="regular-text"
+                                       placeholder="Use global setting" />
+                                <p class="description">Leave empty to use the model from the Models tab. Or specify e.g. <code>gpt-4o</code>, <code>claude-opus-4-6</code>.</p></td>
+                        </tr>
+                        <tr>
+                            <th><label>Temperature Override</label></th>
+                            <td><input type="text" name="agent_temp[<?php echo $idx; ?>]"
+                                       value="<?php echo esc_attr( $agent['temperature'] ?? '' ); ?>" class="small-text"
+                                       placeholder="Global" />
+                                <p class="description">Leave empty for global setting. Range: 0–1.</p></td>
+                        </tr>
+                    </table>
+                </div>
+            <?php $idx++; endforeach; ?>
+            </div>
+
+            <?php submit_button( 'Save Agents' ); ?>
+        </form>
         <?php
     }
 

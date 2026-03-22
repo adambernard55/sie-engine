@@ -3,6 +3,8 @@
     'use strict';
 
     var cfg = window.sieChat || {};
+    var agents = cfg.agents || [];
+    var selectedAgent = agents.length ? agents[0].key : '';
     var sendArrowSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
 
     function init() {
@@ -12,12 +14,27 @@
         var title    = cfg.pageTitle || cfg.title || 'Chat with an AI Expert';
         var subtitle = cfg.pageSubtitle || 'Ask anything — powered by our knowledge base.';
 
+        // Build agent selector pills
+        var agentHtml = '';
+        if (agents.length > 1) {
+            agentHtml = '<div class="sie-agent-selector">';
+            for (var a = 0; a < agents.length; a++) {
+                var ag = agents[a];
+                var active = ag.key === selectedAgent ? ' sie-agent-active' : '';
+                agentHtml += '<button class="sie-agent-pill' + active + '" data-agent="' + escAttr(ag.key) + '" title="' + escAttr(ag.description) + '">' +
+                    escHtml(ag.name) +
+                '</button>';
+            }
+            agentHtml += '</div>';
+        }
+
         root.innerHTML =
             '<div class="sie-chat-page">' +
                 '<div class="sie-page-header">' +
                     '<h2>' + escHtml(title) + '</h2>' +
                     '<p>' + escHtml(subtitle) + '</p>' +
                 '</div>' +
+                agentHtml +
                 '<div class="sie-search-bar">' +
                     '<input type="text" class="sie-search-input" placeholder="Ask a question\u2026" autocomplete="off" />' +
                     '<button class="sie-search-btn" aria-label="Send">' + sendArrowSVG + '</button>' +
@@ -28,6 +45,16 @@
         var input = root.querySelector('.sie-search-input');
         var btn   = root.querySelector('.sie-search-btn');
         var conv  = root.querySelector('.sie-conversation');
+
+        // Agent pill handlers
+        var pills = root.querySelectorAll('.sie-agent-pill');
+        pills.forEach(function (pill) {
+            pill.addEventListener('click', function () {
+                selectedAgent = this.getAttribute('data-agent');
+                pills.forEach(function (p) { p.classList.remove('sie-agent-active'); });
+                this.classList.add('sie-agent-active');
+            });
+        });
 
         btn.addEventListener('click', function () { send(input, btn, conv); });
         input.addEventListener('keydown', function (e) {
@@ -68,7 +95,7 @@
                 'Content-Type': 'application/json',
                 'X-WP-Nonce':   cfg.nonce || '',
             },
-            body: JSON.stringify({ query: query }),
+            body: JSON.stringify({ query: query, agent: selectedAgent }),
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {

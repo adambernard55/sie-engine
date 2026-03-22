@@ -10,6 +10,10 @@
  *   - Insight → "How"  (procedural, actionable guidance)
  *   - Guide   → "Which/When" (decision support, recommendations)
  *
+ * Triad labels are configurable via Settings → SIE (with filter fallback for
+ * backward compatibility). Each site can customize naming, e.g. "Pro Tips"
+ * instead of "Insights", "Hat Tips" for a hat site, etc.
+ *
  * sie_topic taxonomy connects all triad CPTs plus any additional post types
  * opted in via the "SIE-connected post types" setting.
  */
@@ -25,10 +29,45 @@ class SIE_CPT {
     }
 
     // -------------------------------------------------------------------------
+    // Triad Label Helpers (settings-first, filter fallback)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the display labels for each triad CPT.
+     * Priority: settings → filters → hardcoded defaults.
+     */
+    public static function triad_labels(): array {
+        return [
+            'sie_faq' => [
+                'singular' => get_option( 'sie_label_faq_singular' )
+                    ?: apply_filters( 'sie_faq_singular', 'FAQ' ),
+                'plural'   => get_option( 'sie_label_faq_plural' )
+                    ?: apply_filters( 'sie_faq_plural', 'FAQs' ),
+            ],
+            'sie_insight' => [
+                'singular' => get_option( 'sie_label_insight_singular' )
+                    ?: apply_filters( 'sie_insight_singular', 'Insight' ),
+                'plural'   => get_option( 'sie_label_insight_plural' )
+                    ?: apply_filters( 'sie_insight_plural', 'Insights' ),
+                'slug'     => get_option( 'sie_label_insight_slug' )
+                    ?: apply_filters( 'sie_insight_slug', 'insights' ),
+            ],
+            'sie_guide' => [
+                'singular' => get_option( 'sie_label_guide_singular' )
+                    ?: apply_filters( 'sie_guide_singular', 'Guide' ),
+                'plural'   => get_option( 'sie_label_guide_plural' )
+                    ?: apply_filters( 'sie_guide_plural', 'Guides' ),
+            ],
+        ];
+    }
+
+    // -------------------------------------------------------------------------
     // Post Types
     // -------------------------------------------------------------------------
 
     public function register_post_types() {
+
+        $triad = self::triad_labels();
 
         // Knowledge Base — primary CPT for synced KB articles
         register_post_type( 'knowledge_base', [
@@ -48,7 +87,7 @@ class SIE_CPT {
 
         // FAQ — "What is...?"
         register_post_type( 'sie_faq', [
-            'labels' => self::labels( 'FAQ', 'FAQs' ),
+            'labels' => self::labels( $triad['sie_faq']['singular'], $triad['sie_faq']['plural'] ),
             'public'              => true,
             'has_archive'         => true,
             'rewrite'             => [ 'slug' => 'faq', 'with_front' => false ],
@@ -60,18 +99,13 @@ class SIE_CPT {
             'taxonomies'          => [ 'sie_topic' ],
         ] );
 
-        // Insight / Hat Tips — "How do I...?"
-        // Labels and slug are filterable so instances can rebrand
-        // (e.g. "Hat Tips" for a hat site, "Insights" default).
-        $insight_singular = apply_filters( 'sie_insight_singular', 'Insight' );
-        $insight_plural   = apply_filters( 'sie_insight_plural',   'Insights' );
-        $insight_slug     = apply_filters( 'sie_insight_slug',     'insights' );
-
+        // Insight — "How do I...?" / Thought leadership
+        // Labels and slug are configurable per site via settings or filters.
         register_post_type( 'sie_insight', [
-            'labels' => self::labels( $insight_singular, $insight_plural ),
+            'labels' => self::labels( $triad['sie_insight']['singular'], $triad['sie_insight']['plural'] ),
             'public'              => true,
             'has_archive'         => true,
-            'rewrite'             => [ 'slug' => $insight_slug, 'with_front' => false ],
+            'rewrite'             => [ 'slug' => $triad['sie_insight']['slug'] ?? 'insights', 'with_front' => false ],
             'menu_icon'           => 'dashicons-lightbulb',
             'menu_position'       => 26,
             'supports'            => [ 'title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions' ],
@@ -82,7 +116,7 @@ class SIE_CPT {
 
         // Guide — "Which one / when should I...?"
         register_post_type( 'sie_guide', [
-            'labels' => self::labels( 'Guide', 'Guides' ),
+            'labels' => self::labels( $triad['sie_guide']['singular'], $triad['sie_guide']['plural'] ),
             'public'              => true,
             'has_archive'         => true,
             'rewrite'             => [ 'slug' => 'guides', 'with_front' => false ],

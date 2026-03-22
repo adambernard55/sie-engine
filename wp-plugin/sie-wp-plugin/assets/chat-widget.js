@@ -3,10 +3,22 @@
     'use strict';
 
     const cfg = window.sieChat || {};
+    var agents = cfg.agents || [];
+    var selectedAgent = agents.length ? agents[0].key : '';
 
     function init() {
         const root = document.getElementById('sie-chat-root');
         if (!root) return;
+
+        // Agent select dropdown
+        var agentSelect = '';
+        if (agents.length > 1) {
+            agentSelect = '<select id="sie-chat-agent">';
+            for (var a = 0; a < agents.length; a++) {
+                agentSelect += '<option value="' + agents[a].key + '">' + agents[a].name + '</option>';
+            }
+            agentSelect += '</select>';
+        }
 
         root.innerHTML =
             '<div id="sie-chat-panel" hidden>' +
@@ -14,6 +26,7 @@
                     '<span id="sie-chat-title">' + (cfg.title || 'Ask the Knowledge Base') + '</span>' +
                     '<button id="sie-chat-close" aria-label="Close chat">&times;</button>' +
                 '</div>' +
+                (agentSelect ? '<div id="sie-chat-agent-row">' + agentSelect + '</div>' : '') +
                 '<div id="sie-chat-messages" role="log" aria-live="polite"></div>' +
                 '<div id="sie-chat-input-row">' +
                     '<input type="text" id="sie-chat-input" placeholder="Ask a question\u2026" autocomplete="off" />' +
@@ -31,6 +44,13 @@
         document.getElementById('sie-chat-close').addEventListener('click', function () {
             document.getElementById('sie-chat-panel').hidden = true;
         });
+
+        var agentEl = document.getElementById('sie-chat-agent');
+        if (agentEl) {
+            agentEl.addEventListener('change', function () {
+                selectedAgent = this.value;
+            });
+        }
 
         document.getElementById('sie-chat-send').addEventListener('click', send);
         document.getElementById('sie-chat-input').addEventListener('keydown', function (e) {
@@ -55,7 +75,7 @@
                 'Content-Type': 'application/json',
                 'X-WP-Nonce':   cfg.nonce || '',
             },
-            body: JSON.stringify({ query: query }),
+            body: JSON.stringify({ query: query, agent: selectedAgent }),
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {

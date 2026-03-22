@@ -199,6 +199,35 @@
     color: #64748b;
 }
 
+/* ---- Agent selector pills ---- */
+.sie-chat-page .sie-agent-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+.sie-chat-page .sie-agent-pill {
+    padding: 6px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    background: #fff;
+    color: #475569;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.sie-chat-page .sie-agent-pill:hover {
+    border-color: var(--sie-primary, #2563eb);
+    color: var(--sie-primary, #2563eb);
+}
+.sie-chat-page .sie-agent-pill.sie-agent-active {
+    background: var(--sie-primary, #2563eb);
+    color: #fff;
+    border-color: var(--sie-primary, #2563eb);
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 640px) {
     .sie-chat-page {
