@@ -451,19 +451,23 @@ class SIE_Chat_API {
     }
 
     /**
-     * Enqueue widget assets only if the page chat shortcode was NOT used on this page.
+     * Auto-inject the floating widget on every page (via wp_footer),
+     * unless [sie_chat_page] is active on this page.
      */
     public function maybe_enqueue_widget() {
         if ( $this->page_chat_active ) return;
+
         wp_enqueue_style( 'sie-chat' );
         wp_enqueue_script( 'sie-chat' );
+
+        // Inject widget markup into the footer so it appears site-wide
+        echo '<div id="sie-chat-root"></div>';
     }
 
-    /** Shortcode [sie_chat] — floating widget bubble */
+    /** Shortcode [sie_chat] — kept for backwards compat but widget auto-injects now */
     public function render_widget( $atts ) {
-        if ( ! $this->user_can_see_widget() ) return '';
-        if ( $this->page_chat_active ) return ''; // Don't show widget if page chat is on this page
-        return '<div id="sie-chat-root"></div>';
+        // Widget is auto-injected via wp_footer, shortcode is a no-op
+        return '';
     }
 
     /** Shortcode [sie_chat_page] — full-page search-style chat */
