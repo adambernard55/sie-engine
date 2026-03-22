@@ -17,7 +17,7 @@
     width: 52px;
     height: 52px;
     border-radius: 50%;
-    background: #2563eb;
+    background: var(--sie-primary, #2563eb);
     color: #fff;
     border: none;
     cursor: pointer;
@@ -26,7 +26,7 @@
     float: right;
     transition: background 0.15s;
 }
-#sie-chat-toggle:hover { background: #1d4ed8; }
+#sie-chat-toggle:hover { background: var(--sie-primary, #2563eb); filter: brightness(0.9); }
 
 /* Panel */
 #sie-chat-panel {
@@ -47,7 +47,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px;
-    background: #2563eb;
+    background: var(--sie-header-bg, #2563eb);
     color: #fff;
     font-weight: 600;
     flex-shrink: 0;
@@ -83,13 +83,13 @@
     word-wrap: break-word;
 }
 .sie-user {
-    background: #2563eb;
+    background: var(--sie-user-bubble, #2563eb);
     color: #fff;
     align-self: flex-end;
     border-bottom-right-radius: 3px;
 }
 .sie-assistant {
-    background: #f1f5f9;
+    background: var(--sie-assistant-bg, #f1f5f9);
     color: #1e293b;
     align-self: flex-start;
     border-bottom-left-radius: 3px;
@@ -123,12 +123,12 @@
     outline: none;
     font-family: inherit;
 }
-#sie-chat-input:focus { border-color: #2563eb; }
+#sie-chat-input:focus { border-color: var(--sie-primary, #2563eb); }
 #sie-chat-input:disabled { background: #f8fafc; }
 
 #sie-chat-send {
     padding: 8px 16px;
-    background: #2563eb;
+    background: var(--sie-primary, #2563eb);
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -137,5 +137,5 @@
     font-family: inherit;
     transition: background 0.15s;
 }
-#sie-chat-send:hover    { background: #1d4ed8; }
+#sie-chat-send:hover    { background: var(--sie-primary, #2563eb); filter: brightness(0.9); }
 #sie-chat-send:disabled { background: #93c5fd; cursor: default; }

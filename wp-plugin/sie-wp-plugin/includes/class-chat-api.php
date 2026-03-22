@@ -82,12 +82,28 @@ class SIE_Chat_API {
         // 4. Access level check
         $access = get_option( 'sie_chat_access', 'logged_in' );
 
-        if ( $access === 'public'    ) return true;
         if ( $access === 'logged_in' ) return is_user_logged_in();
 
-        // Role-based
-        $role = get_option( 'sie_chat_role', 'subscriber' );
-        return current_user_can( $role );
+        if ( $access === 'role' ) {
+            $role = get_option( 'sie_chat_role', 'subscriber' );
+            return current_user_can( $role );
+        }
+
+        // Public — but apply guest limits if not logged in
+        if ( $access === 'public' && ! is_user_logged_in() ) {
+            $guest_limit = (int) get_option( 'sie_guest_query_limit', 3 );
+            if ( $guest_limit > 0 ) {
+                $guest_key   = 'sie_guest_' . md5( $ip );
+                $guest_count = (int) get_transient( $guest_key );
+                if ( $guest_count >= $guest_limit ) {
+                    $msg = get_option( 'sie_guest_limit_msg', 'Sign in to continue the conversation.' );
+                    return new WP_Error( 'sie_guest_limit', $msg, [ 'status' => 403 ] );
+                }
+                set_transient( $guest_key, $guest_count + 1, DAY_IN_SECONDS );
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -434,6 +450,7 @@ class SIE_Chat_API {
             'title'         => get_option( 'sie_chat_title', 'Ask the Knowledge Base' ),
             'pageTitle'     => get_option( 'sie_page_chat_title', 'Chat with an AI Expert' ),
             'pageSubtitle'  => get_option( 'sie_page_chat_subtitle', 'Ask anything — powered by our knowledge base.' ),
+            'loginUrl'      => wp_login_url( get_permalink() ),
         ];
 
         // Always register both — only enqueue widget if page chat isn't active
@@ -441,6 +458,17 @@ class SIE_Chat_API {
         wp_register_script( 'sie-chat',      SIE_PLUGIN_URL . 'assets/chat-widget.js',  [], SIE_VERSION, true );
         wp_register_style(  'sie-chat-page', SIE_PLUGIN_URL . 'assets/chat-page.css',   [], SIE_VERSION );
         wp_register_script( 'sie-chat-page', SIE_PLUGIN_URL . 'assets/chat-page.js',    [], SIE_VERSION, true );
+
+        // Inject color CSS custom properties
+        $colors = sprintf(
+            ':root{--sie-primary:%s;--sie-user-bubble:%s;--sie-assistant-bg:%s;--sie-header-bg:%s;}',
+            sanitize_hex_color( get_option( 'sie_color_primary',      '#2563eb' ) ),
+            sanitize_hex_color( get_option( 'sie_color_user_bubble',  '#2563eb' ) ),
+            sanitize_hex_color( get_option( 'sie_color_assistant_bg', '#f1f5f9' ) ),
+            sanitize_hex_color( get_option( 'sie_color_header_bg',    '#2563eb' ) )
+        );
+        wp_add_inline_style( 'sie-chat', $colors );
+        wp_add_inline_style( 'sie-chat-page', $colors );
 
         // Localize both scripts with the same config
         wp_localize_script( 'sie-chat',      'sieChat', $localized );

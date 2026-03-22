@@ -24,7 +24,7 @@
     margin-bottom: 24px;
 }
 .sie-chat-page .sie-search-bar:focus-within {
-    border-color: #2563eb;
+    border-color: var(--sie-primary, #2563eb);
     box-shadow: 0 4px 20px rgba(37, 99, 235, 0.12);
 }
 
@@ -52,15 +52,15 @@
     width: 42px;
     height: 42px;
     border-radius: 50%;
-    background: #2563eb;
+    background: var(--sie-primary, #2563eb);
     color: #fff;
     border: none;
     cursor: pointer;
     flex-shrink: 0;
     transition: background 0.15s;
 }
-.sie-chat-page .sie-search-btn:hover { background: #1d4ed8; }
-.sie-chat-page .sie-search-btn:disabled { background: #93c5fd; cursor: default; }
+.sie-chat-page .sie-search-btn:hover { background: var(--sie-primary, #2563eb); filter: brightness(0.9); }
+.sie-chat-page .sie-search-btn:disabled { background: var(--sie-primary, #2563eb); opacity: 0.5; cursor: default; }
 .sie-chat-page .sie-search-btn svg {
     width: 20px;
     height: 20px;
@@ -97,7 +97,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: #2563eb;
+    background: var(--sie-primary, #2563eb);
     color: #fff;
     display: flex;
     align-items: center;
