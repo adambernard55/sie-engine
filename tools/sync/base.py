@@ -191,7 +191,15 @@ def load_config(config_path: str = None, profile: str = None) -> SyncConfig:
         default_topic_id = int(p.get("default_topic_id", default_topic_id))
         filter_path = p.get("filter_path", "")
         pinecone_enabled = p.get("pinecone", pinecone_enabled)
+
+        # Per-profile content_root overrides kb_root for this sync run.
+        # Allows profiles to point at a different directory than the main KB.
+        if p.get("content_root"):
+            kb_root = Path(p["content_root"]).expanduser().resolve()
+
         print(f"Profile: {profile} → {wp_post_type} ({url_prefix})")
+        if p.get("content_root"):
+            print(f"  Content root: {kb_root}")
 
     return SyncConfig(
         kb_root=kb_root,

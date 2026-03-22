@@ -132,9 +132,9 @@ class SIE_Chat_API {
     public function handle_chat( WP_REST_Request $request ) {
         $query        = $request->get_param( 'query' );
         $agent_key    = $request->get_param( 'agent' );
-        $openai_key   = get_option( 'sie_openai_api_key',   '' );
-        $pinecone_key = get_option( 'sie_pinecone_api_key', '' );
-        $pinecone_host = get_option( 'sie_pinecone_host',   '' );
+        $openai_key    = sie_get_option( 'sie_openai_api_key',   '' );
+        $pinecone_key  = sie_get_option( 'sie_pinecone_api_key', '' );
+        $pinecone_host = sie_get_option( 'sie_pinecone_host',   '' );
 
         if ( ! $openai_key || ! $pinecone_key || ! $pinecone_host ) {
             return new WP_Error( 'sie_not_configured', 'SIE is not fully configured.', [ 'status' => 503 ] );
@@ -171,12 +171,12 @@ class SIE_Chat_API {
         if ( $provider === 'openai' ) {
             $llm_key = $openai_key;
         } elseif ( $provider === 'gemini' ) {
-            $llm_key = get_option( 'sie_gemini_api_key', '' );
+            $llm_key = sie_get_option( 'sie_gemini_api_key', '' );
             if ( ! $llm_key ) {
                 return new WP_Error( 'sie_not_configured', 'Gemini API key is not configured.', [ 'status' => 503 ] );
             }
         } else {
-            $llm_key = get_option( 'sie_anthropic_api_key', '' );
+            $llm_key = sie_get_option( 'sie_anthropic_api_key', '' );
             if ( ! $llm_key ) {
                 return new WP_Error( 'sie_not_configured', 'Anthropic API key is not configured.', [ 'status' => 503 ] );
             }
@@ -432,10 +432,17 @@ class SIE_Chat_API {
 
         if ( is_wp_error( $res ) ) return $res;
 
+        $code = wp_remote_retrieve_response_code( $res );
         $body = json_decode( wp_remote_retrieve_body( $res ), true );
+
+        if ( $code !== 200 ) {
+            $msg = $body['error']['message'] ?? $body['message'] ?? "HTTP {$code}";
+            return new WP_Error( 'sie_anthropic_error', 'Anthropic: ' . $msg );
+        }
+
         $text = $body['content'][0]['text'] ?? null;
 
-        return $text ?? new WP_Error( 'sie_anthropic_error', 'Anthropic response failed.' );
+        return $text ?? new WP_Error( 'sie_anthropic_error', 'Anthropic returned an empty response.' );
     }
 
     // -------------------------------------------------------------------------

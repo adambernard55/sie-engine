@@ -107,16 +107,31 @@ class SIE_Settings {
         );
     }
 
-    /** Map each option to the tab it appears on. */
+    /**
+     * Map each option to the tab (or tab+section) it appears on.
+     * The Settings tab has sub-sections; each gets its own key:
+     *   settings:api-keys, settings:appearance, settings:prompts, etc.
+     * This prevents saving one sub-section from blanking another.
+     */
     private const TAB_OPTIONS = [
-        'settings' => [
+        // Settings sub-sections
+        'settings:api-keys' => [
             'sie_openai_api_key', 'sie_anthropic_api_key', 'sie_gemini_api_key',
             'sie_pinecone_api_key', 'sie_pinecone_host', 'sie_pinecone_index',
-            'sie_chat_access', 'sie_chat_role', 'sie_chat_title',
-            'sie_page_chat_title', 'sie_page_chat_subtitle', 'sie_system_prompt',
-            'sie_chat_disclaimer',
+        ],
+        'settings:appearance' => [
+            'sie_chat_title', 'sie_page_chat_title', 'sie_page_chat_subtitle',
             'sie_color_primary', 'sie_color_user_bubble', 'sie_color_assistant_bg',
-            'sie_color_header_bg', 'sie_seo_plugin',
+            'sie_color_header_bg',
+        ],
+        'settings:prompts' => [
+            'sie_system_prompt', 'sie_chat_disclaimer',
+        ],
+        'settings:access' => [
+            'sie_chat_access', 'sie_chat_role',
+        ],
+        'settings:seo' => [
+            'sie_seo_plugin',
         ],
         'models' => [
             'sie_llm_provider', 'sie_openai_model', 'sie_anthropic_model',
@@ -139,14 +154,36 @@ class SIE_Settings {
 
     public function register_settings() {
         // Determine which tab is being saved (from the referer URL)
-        $active_tab = 'general';
+        // Determine which tab (and section) is being saved so we only register
+        // those options. This prevents saving one tab/section from blanking another.
+        $active_tab = '';
+        $active_section = '';
         $referer = wp_get_referer();
-        if ( $referer && preg_match( '/[?&]tab=([a-z_]+)/', $referer, $m ) ) {
-            $active_tab = $m[1];
+        if ( $referer ) {
+            if ( preg_match( '/[?&]tab=([a-z_]+)/', $referer, $m ) ) {
+                $active_tab = $m[1];
+            }
+            if ( preg_match( '/[?&]section=([a-z_-]+)/', $referer, $m ) ) {
+                $active_section = $m[1];
+            }
         }
 
-        // Only register options that belong to the active tab
-        $tab_keys = self::TAB_OPTIONS[ $active_tab ] ?? [];
+        // Build the TAB_OPTIONS lookup key.
+        // Settings sub-sections use "settings:api-keys" format.
+        $lookup_key = $active_tab;
+        if ( $active_tab === 'settings' && $active_section ) {
+            $lookup_key = 'settings:' . $active_section;
+        } elseif ( $active_tab === 'settings' ) {
+            $lookup_key = 'settings:api-keys'; // default sub-section
+        }
+
+        // Fall back to the first key that has registered options
+        if ( ! $lookup_key || ! isset( self::TAB_OPTIONS[ $lookup_key ] ) ) {
+            $lookup_key = array_key_first( self::TAB_OPTIONS ) ?: 'settings:api-keys';
+        }
+
+        // Only register options that belong to the active tab/section
+        $tab_keys = self::TAB_OPTIONS[ $lookup_key ] ?? [];
 
         foreach ( self::OPTIONS as $key => $default ) {
             if ( in_array( $key, $tab_keys, true ) ) {
@@ -328,8 +365,8 @@ class SIE_Settings {
         $pending    = count( array_filter( $jobs, fn( $j ) => $j['status'] === 'queued' ) );
 
         // Quick status checks
-        $has_openai   = ! empty( get_option( 'sie_openai_api_key' ) );
-        $has_pinecone = ! empty( get_option( 'sie_pinecone_api_key' ) ) && ! empty( get_option( 'sie_pinecone_host' ) );
+        $has_openai   = ! empty( sie_get_option( 'sie_openai_api_key' ) );
+        $has_pinecone = ! empty( sie_get_option( 'sie_pinecone_api_key' ) ) && ! empty( sie_get_option( 'sie_pinecone_host' ) );
         $providers    = [ 'openai' => 'OpenAI', 'anthropic' => 'Anthropic', 'gemini' => 'Gemini' ];
         ?>
 
@@ -447,47 +484,58 @@ class SIE_Settings {
         }
     }
 
+    /**
+     * Render a credential field — locked (read-only) if a wp-config constant is set.
+     */
+    private function render_credential_field( string $option, string $label, string $type = 'password', string $description = '', string $placeholder = '' ) {
+        $locked = sie_option_is_locked( $option );
+        $value  = $locked ? '••••••••' : esc_attr( get_option( $option, '' ) );
+        ?>
+        <tr>
+            <th><label for="<?php echo esc_attr( $option ); ?>"><?php echo esc_html( $label ); ?></label></th>
+            <td>
+                <?php if ( $locked ) : ?>
+                    <input type="text" id="<?php echo esc_attr( $option ); ?>"
+                           value="<?php echo esc_attr( $value ); ?>"
+                           class="regular-text" disabled="disabled"
+                           style="background:#f0f0f1;color:#50575e;" />
+                    <span style="color:#16a34a;margin-left:8px;">&#x1f512; Set in wp-config.php</span>
+                <?php else : ?>
+                    <input type="<?php echo esc_attr( $type ); ?>"
+                           name="<?php echo esc_attr( $option ); ?>"
+                           id="<?php echo esc_attr( $option ); ?>"
+                           value="<?php echo esc_attr( $value ); ?>"
+                           class="regular-text" autocomplete="off"
+                           <?php echo $placeholder ? 'placeholder="' . esc_attr( $placeholder ) . '"' : ''; ?> />
+                <?php endif; ?>
+                <?php if ( $description ) : ?>
+                    <p class="description"><?php echo esc_html( $description ); ?></p>
+                <?php endif; ?>
+            </td>
+        </tr>
+        <?php
+    }
+
     private function section_api_keys() {
+        $any_locked = sie_option_is_locked( 'sie_openai_api_key' )
+            || sie_option_is_locked( 'sie_pinecone_api_key' );
         ?>
         <h2>API Credentials</h2>
+        <?php if ( ! $any_locked ) : ?>
+            <p class="description" style="margin-bottom:12px;">
+                <strong>Tip:</strong> For protection against accidental deletion, define API keys as constants in
+                <code>wp-config.php</code> instead. Example: <code>define( 'SIE_OPENAI_API_KEY', 'sk-...' );</code>
+            </p>
+        <?php endif; ?>
         <table class="form-table" role="presentation">
-            <tr>
-                <th><label for="sie_openai_api_key">OpenAI API Key</label></th>
-                <td><input type="password" name="sie_openai_api_key" id="sie_openai_api_key"
-                           value="<?php echo esc_attr( get_option( 'sie_openai_api_key' ) ); ?>"
-                           class="regular-text" autocomplete="off" />
-                    <p class="description">Required for embeddings. Also used for chat if OpenAI is selected.</p></td>
-            </tr>
-            <tr>
-                <th><label for="sie_anthropic_api_key">Anthropic API Key</label></th>
-                <td><input type="password" name="sie_anthropic_api_key" id="sie_anthropic_api_key"
-                           value="<?php echo esc_attr( get_option( 'sie_anthropic_api_key' ) ); ?>"
-                           class="regular-text" autocomplete="off" /></td>
-            </tr>
-            <tr>
-                <th><label for="sie_gemini_api_key">Google Gemini API Key</label></th>
-                <td><input type="password" name="sie_gemini_api_key" id="sie_gemini_api_key"
-                           value="<?php echo esc_attr( get_option( 'sie_gemini_api_key' ) ); ?>"
-                           class="regular-text" autocomplete="off" /></td>
-            </tr>
-            <tr>
-                <th><label for="sie_pinecone_api_key">Pinecone API Key</label></th>
-                <td><input type="password" name="sie_pinecone_api_key" id="sie_pinecone_api_key"
-                           value="<?php echo esc_attr( get_option( 'sie_pinecone_api_key' ) ); ?>"
-                           class="regular-text" autocomplete="off" /></td>
-            </tr>
-            <tr>
-                <th><label for="sie_pinecone_host">Pinecone Host</label></th>
-                <td><input type="text" name="sie_pinecone_host" id="sie_pinecone_host"
-                           value="<?php echo esc_attr( get_option( 'sie_pinecone_host' ) ); ?>"
-                           class="regular-text" placeholder="https://your-index.svc.pinecone.io" /></td>
-            </tr>
-            <tr>
-                <th><label for="sie_pinecone_index">Pinecone Index Name</label></th>
-                <td><input type="text" name="sie_pinecone_index" id="sie_pinecone_index"
-                           value="<?php echo esc_attr( get_option( 'sie_pinecone_index' ) ); ?>"
-                           class="regular-text" /></td>
-            </tr>
+            <?php
+            $this->render_credential_field( 'sie_openai_api_key',    'OpenAI API Key',    'password', 'Required for embeddings. Also used for chat if OpenAI is selected.' );
+            $this->render_credential_field( 'sie_anthropic_api_key', 'Anthropic API Key' );
+            $this->render_credential_field( 'sie_gemini_api_key',    'Google Gemini API Key' );
+            $this->render_credential_field( 'sie_pinecone_api_key',  'Pinecone API Key' );
+            $this->render_credential_field( 'sie_pinecone_host',     'Pinecone Host', 'text', '', 'https://your-index.svc.pinecone.io' );
+            $this->render_credential_field( 'sie_pinecone_index',    'Pinecone Index Name', 'text' );
+            ?>
         </table>
         <?php
     }
@@ -1646,13 +1694,7 @@ class SIE_Settings {
                            class="regular-text" placeholder="owner/repo-name" />
                     <p class="description">The instance repo (e.g. <code>adambernard55/sie-adambernard</code>), not the engine repo.</p></td>
             </tr>
-            <tr>
-                <th><label for="sie_github_token">GitHub Token</label></th>
-                <td><input type="password" name="sie_github_token" id="sie_github_token"
-                           value="<?php echo esc_attr( get_option( 'sie_github_token' ) ); ?>"
-                           class="regular-text" autocomplete="off" />
-                    <p class="description">Personal access token with <code>repo</code> and <code>workflow</code> scopes. Used to dispatch sync workflows.</p></td>
-            </tr>
+            <?php $this->render_credential_field( 'sie_github_token', 'GitHub Token', 'password', 'Personal access token with repo and workflow scopes. Used to dispatch sync workflows.' ); ?>
             <tr>
                 <th><label for="sie_sync_workflow">Workflow File</label></th>
                 <td><input type="text" name="sie_sync_workflow" id="sie_sync_workflow"
@@ -1665,7 +1707,7 @@ class SIE_Settings {
         <h2>Run Sync</h2>
         <?php
         $repo = get_option( 'sie_github_repo' );
-        $token = get_option( 'sie_github_token' );
+        $token = sie_get_option( 'sie_github_token' );
         if ( $repo && $token ) :
         ?>
         <table class="form-table" role="presentation">
